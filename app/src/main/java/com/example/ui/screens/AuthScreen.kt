@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.SavedAccount
 import com.example.data.model.UserProfile
 import com.example.ui.components.UserAvatar
 import com.example.ui.theme.QBackground
@@ -77,9 +79,10 @@ import com.example.ui.theme.QYellowPrimary
 fun AuthScreen(
     onLogin: (email: String, pass: String, (Boolean, String?) -> Unit) -> Unit,
     onSignUp: (email: String, pass: String, username: String, name: String, (Boolean, String?) -> Unit) -> Unit,
-    onSelectDemoUser: (UserProfile) -> Unit,
     onContinueAsGuest: () -> Unit,
-    demoProfiles: List<UserProfile> = emptyList()
+    savedAccounts: List<SavedAccount> = emptyList(),
+    onSelectSavedAccount: (SavedAccount) -> Unit = {},
+    onRemoveSavedAccount: (SavedAccount) -> Unit = {}
 ) {
     var isSignUp by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
@@ -366,77 +369,113 @@ fun AuthScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Quick Demo Accounts Section
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            HorizontalDivider(modifier = Modifier.weight(1f), color = QCardBorder)
-            Text(
-                text = " OR EXPLORE AS CREATOR ",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = QOnSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-            HorizontalDivider(modifier = Modifier.weight(1f), color = QCardBorder)
-        }
+        if (savedAccounts.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(20.dp))
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Demo user suggestions
-        demoProfiles.take(2).forEach { profile ->
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = QSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clickable { onSelectDemoUser(profile) }
-                    .testTag("demo_user_${profile.effectiveUsername}")
+            // Saved Accounts Section
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(12.dp)
+                HorizontalDivider(modifier = Modifier.weight(1f), color = QCardBorder)
+                Text(
+                    text = " SAVED ACCOUNTS ON THIS DEVICE ",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = QOnSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+                HorizontalDivider(modifier = Modifier.weight(1f), color = QCardBorder)
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            savedAccounts.forEach { account ->
+                val initials = account.displayName.take(2).ifBlank { account.email.take(2) }.uppercase()
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = QSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .testTag("saved_account_${account.email}")
                 ) {
-                    UserAvatar(
-                        avatarUrl = profile.avatarUrl,
-                        initials = profile.initials,
-                        size = 38.dp
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = profile.effectiveDisplayName,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = QOnSurface
-                        )
-                        Text(
-                            text = "@${profile.effectiveUsername} • ${profile.creatorRank ?: "Creator"}",
-                            fontSize = 12.sp,
-                            color = QOnSurfaceVariant
-                        )
-                    }
-                    Box(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(QYellowLight)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .fillMaxWidth()
+                            .padding(12.dp)
                     ) {
-                        Text(
-                            text = "Switch",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = QYellowDark
+                        UserAvatar(
+                            avatarUrl = account.avatarUrl,
+                            initials = initials,
+                            size = 40.dp
                         )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSelectSavedAccount(account) }
+                        ) {
+                            Text(
+                                text = account.displayName.ifBlank { account.username },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = QOnSurface
+                            )
+                            Text(
+                                text = account.email,
+                                fontSize = 12.sp,
+                                color = QOnSurfaceVariant
+                            )
+                            Text(
+                                text = "Password: ••••••••",
+                                fontSize = 11.sp,
+                                color = QOnSurfaceVariant.copy(alpha = 0.8f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Quick 1-tap Login Button
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(QYellowLight)
+                                .clickable { onSelectSavedAccount(account) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Log In",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QYellowDark
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Delete/Remove saved account button
+                        IconButton(
+                            onClick = { onRemoveSavedAccount(account) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Remove account from device",
+                                tint = QLikeRed.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+        } else {
+            Spacer(modifier = Modifier.height(20.dp))
+        }
 
         // Guest Explorer Button
         OutlinedButton(

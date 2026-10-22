@@ -1,5 +1,11 @@
 package com.example.data.api
 
+import com.example.data.model.CreatePhotoPostRequest
+import com.example.data.model.CreateTextPostRequest
+import com.example.data.model.CreateVideoPostRequest
+import com.example.data.model.PhotoPost
+import com.example.data.model.TextPost
+import com.example.data.model.VideoPost
 import com.example.data.model.AuthResponse
 import com.example.data.model.AuthSignInRequest
 import com.example.data.model.AuthSignUpRequest
@@ -63,13 +69,18 @@ interface SupabaseApi {
         @Header("Authorization") userToken: String? = null
     ): Response<List<UserProfile>>
 
-    // 2. Table: posts
-    @GET("rest/v1/posts?select=*,profiles:user_id(*)&order=created_at.desc")
+    // 2. Table: posts & sub-tables (video_posts, photo_posts, text_posts)
+    @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)&order=created_at.desc")
     suspend fun getPosts(
         @Query("limit") limit: Int = 50
     ): Response<List<Post>>
 
     @GET("rest/v1/posts?select=*,profiles:user_id(*)&order=created_at.desc")
+    suspend fun getPostsLegacy(
+        @Query("limit") limit: Int = 50
+    ): Response<List<Post>>
+
+    @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)&order=created_at.desc")
     suspend fun getPostsByUser(
         @Query("user_id") userIdFilter: String,
         @Query("limit") limit: Int = 40
@@ -81,6 +92,27 @@ interface SupabaseApi {
         @Header("Prefer") prefer: String = "return=representation",
         @Header("Authorization") userToken: String? = null
     ): Response<List<Post>>
+
+    @POST("rest/v1/video_posts")
+    suspend fun createVideoPost(
+        @Body request: CreateVideoPostRequest,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<VideoPost>>
+
+    @POST("rest/v1/photo_posts")
+    suspend fun createPhotoPost(
+        @Body request: CreatePhotoPostRequest,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<PhotoPost>>
+
+    @POST("rest/v1/text_posts")
+    suspend fun createTextPost(
+        @Body request: CreateTextPostRequest,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<TextPost>>
 
     // 3. Table: post_reactions (Likes / Appreciations)
     // Note: Database trigger trg_post_reaction_count handles posts.appreciations_count

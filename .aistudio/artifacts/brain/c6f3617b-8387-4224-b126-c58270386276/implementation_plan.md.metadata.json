@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for upgrading Qylomi post creation system with multi-type sub-tables (Video, Photo, Text) in Supabase, platform auto-detection & live embed video player, multi-photo attachments, preset background & color mix templates for text posts, and zero-data-loss architecture.",
+  "updatedAt":  "2026-10-22T16:12:28.420669146Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

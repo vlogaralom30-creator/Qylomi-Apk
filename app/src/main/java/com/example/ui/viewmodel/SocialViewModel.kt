@@ -12,6 +12,7 @@ import com.example.data.repository.SocialRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.data.model.SavedAccount
 import kotlinx.coroutines.launch
 
 class SocialViewModel(application: Application) : AndroidViewModel(application) {
@@ -20,6 +21,11 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     val currentUser: StateFlow<UserProfile?> = repository.currentUser
     val isLoggedIn: StateFlow<Boolean> = repository.isLoggedIn
+    val savedAccounts: StateFlow<List<SavedAccount>> = repository.savedAccounts
+
+    fun removeSavedAccount(account: SavedAccount) {
+        repository.removeSavedAccount(account.email)
+    }
 
     private val _feedPosts = MutableStateFlow<List<Post>>(emptyList())
     val feedPosts: StateFlow<List<Post>> = _feedPosts.asStateFlow()
@@ -171,6 +177,64 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                 onDone(true, null)
             }.onFailure { e ->
                 onDone(false, e.localizedMessage ?: "Failed to post")
+            }
+        }
+    }
+
+    fun createVideoPost(
+        title: String?,
+        videoUrl: String,
+        thumbnailUrl: String?,
+        category: String?,
+        tags: List<String>,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.createVideoPost(title, videoUrl, thumbnailUrl, category, tags)
+            res.onSuccess { newPost ->
+                _feedPosts.value = listOf(newPost) + _feedPosts.value
+                setBanner("Video post published!")
+                onDone(true, null)
+            }.onFailure { e ->
+                onDone(false, e.localizedMessage ?: "Failed to publish video post")
+            }
+        }
+    }
+
+    fun createPhotoPost(
+        caption: String?,
+        photoUrls: List<String>,
+        category: String?,
+        tags: List<String>,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.createPhotoPost(caption, photoUrls, category, tags)
+            res.onSuccess { newPost ->
+                _feedPosts.value = listOf(newPost) + _feedPosts.value
+                setBanner("Photo gallery published!")
+                onDone(true, null)
+            }.onFailure { e ->
+                onDone(false, e.localizedMessage ?: "Failed to publish photo gallery")
+            }
+        }
+    }
+
+    fun createTextPost(
+        caption: String,
+        templateId: String?,
+        category: String?,
+        tags: List<String>,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.createTextPost(caption, templateId, category, tags)
+            res.onSuccess { newPost ->
+                _feedPosts.value = listOf(newPost) + _feedPosts.value
+                setBanner("Thought post published!")
+                onDone(true, null)
+            }.onFailure { e ->
+                onDone(false, e.localizedMessage ?: "Failed to publish thought post")
             }
         }
     }

@@ -16,7 +16,17 @@ import com.example.data.model.PostReaction
 import com.example.data.model.ProfileUpdateRequest
 import com.example.data.model.SavedPost
 import com.example.data.model.UserProfile
+import com.example.data.model.CreatePhotoPostRequest
+import com.example.data.model.CreateTextPostRequest
+import com.example.data.model.CreateVideoPostRequest
+import com.example.data.model.PhotoPost
+import com.example.data.model.TextPost
+import com.example.data.model.VideoPost
+import com.example.util.VideoEmbedUtils
 import com.example.data.service.SupabaseService
+import com.example.data.model.SavedAccount
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,11 +51,15 @@ class SocialRepository(
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
+    private val _savedAccounts = MutableStateFlow<List<SavedAccount>>(emptyList())
+    val savedAccounts: StateFlow<List<SavedAccount>> = _savedAccounts.asStateFlow()
+
     private val followedUserIds = mutableSetOf<String>()
     private val likedPostIds = mutableSetOf<String>()
     private val savedPostIds = mutableSetOf<String>()
 
     init {
+        loadSavedAccounts()
         val savedUserId = prefs.getString("saved_user_id", null)
         val savedToken = prefs.getString("saved_token", null)
         if (!savedToken.isNullOrBlank()) {
@@ -60,6 +74,75 @@ class SocialRepository(
             )
             _isLoggedIn.value = true
         }
+    }
+
+    private fun loadSavedAccounts() {
+        try {
+            val jsonStr = prefs.getString("saved_accounts_list_v1", null)
+            if (!jsonStr.isNullOrBlank()) {
+                val array = JSONArray(jsonStr)
+                val list = mutableListOf<SavedAccount>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    list.add(
+                        SavedAccount(
+                            email = obj.optString("email", ""),
+                            pass = obj.optString("pass", ""),
+                            displayName = obj.optString("displayName", ""),
+                            username = obj.optString("username", ""),
+                            avatarUrl = if (obj.has("avatarUrl") && !obj.isNull("avatarUrl")) obj.getString("avatarUrl") else null
+                        )
+                    )
+                }
+                _savedAccounts.value = list
+            } else {
+                _savedAccounts.value = emptyList()
+            }
+        } catch (_: Exception) {
+            _savedAccounts.value = emptyList()
+        }
+    }
+
+    fun saveAccountCredential(email: String, pass: String, displayName: String, username: String, avatarUrl: String?) {
+        if (email.isBlank() || pass.isBlank()) return
+        val currentList = _savedAccounts.value.toMutableList()
+        currentList.removeAll { it.email.equals(email, ignoreCase = true) }
+        currentList.add(
+            0,
+            SavedAccount(
+                email = email,
+                pass = pass,
+                displayName = displayName.ifBlank { email.substringBefore("@") },
+                username = username.ifBlank { email.substringBefore("@") },
+                avatarUrl = avatarUrl
+            )
+        )
+        persistSavedAccounts(currentList)
+    }
+
+    fun removeSavedAccount(email: String) {
+        val currentList = _savedAccounts.value.toMutableList()
+        currentList.removeAll { it.email.equals(email, ignoreCase = true) }
+        persistSavedAccounts(currentList)
+    }
+
+    private fun persistSavedAccounts(list: List<SavedAccount>) {
+        _savedAccounts.value = list
+        try {
+            val array = JSONArray()
+            list.forEach { item ->
+                val obj = JSONObject()
+                obj.put("email", item.email)
+                obj.put("pass", item.pass)
+                obj.put("displayName", item.displayName)
+                obj.put("username", item.username)
+                if (item.avatarUrl != null) {
+                    obj.put("avatarUrl", item.avatarUrl)
+                }
+                array.put(obj)
+            }
+            prefs.edit().putString("saved_accounts_list_v1", array.toString()).apply()
+        } catch (_: Exception) {}
     }
 
     suspend fun restoreSession() = withContext(Dispatchers.IO) {
@@ -123,6 +206,13 @@ class SocialRepository(
                     _currentUser.value = profile
                     _isLoggedIn.value = true
                     saveUserSession(profile, token)
+                    saveAccountCredential(
+                        email = email,
+                        pass = pass,
+                        displayName = profile.effectiveDisplayName,
+                        username = profile.effectiveUsername,
+                        avatarUrl = profile.avatarUrl
+                    )
                     loadUserEngagement(profile.id)
                     Result.success(profile)
                 },
@@ -163,6 +253,13 @@ class SocialRepository(
                     _currentUser.value = newProfile
                     _isLoggedIn.value = true
                     saveUserSession(newProfile, token)
+                    saveAccountCredential(
+                        email = email,
+                        pass = pass,
+                        displayName = newProfile.effectiveDisplayName,
+                        username = newProfile.effectiveUsername,
+                        avatarUrl = newProfile.avatarUrl
+                    )
                     loadUserEngagement(newProfile.id)
                     Result.success(newProfile)
                 },
@@ -189,7 +286,13 @@ class SocialRepository(
         likedPostIds.clear()
         savedPostIds.clear()
         followedUserIds.clear()
-        prefs.edit().clear().apply()
+        prefs.edit()
+            .remove("saved_user_id")
+            .remove("saved_username")
+            .remove("saved_display_name")
+            .remove("saved_avatar_url")
+            .remove("saved_token")
+            .apply()
     }
 
     private fun saveUserSession(profile: UserProfile, token: String?) {
@@ -239,7 +342,19 @@ class SocialRepository(
                 }
                 Result.success(posts)
             } else {
-                Result.failure(Exception(res.errorBody()?.string() ?: "Failed to load posts"))
+                // Fallback to legacy posts select query if sub-tables are not created in PostgREST schema yet
+                val legacyRes = SupabaseClient.api.getPostsLegacy(limit = 50)
+                if (legacyRes.isSuccessful && legacyRes.body() != null) {
+                    val posts = legacyRes.body()!!.map { post ->
+                        post.copy(
+                            isLikedByMe = likedPostIds.contains(post.id),
+                            isBookmarkedByMe = savedPostIds.contains(post.id)
+                        )
+                    }
+                    Result.success(posts)
+                } else {
+                    Result.failure(Exception(res.errorBody()?.string() ?: "Failed to load posts"))
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -281,6 +396,168 @@ class SocialRepository(
                 Result.success(created)
             } else {
                 Result.failure(Exception(res.errorBody()?.string() ?: "Failed to publish post"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createVideoPost(
+        title: String?,
+        videoUrl: String,
+        thumbnailUrl: String?,
+        category: String?,
+        tags: List<String>
+    ): Result<Post> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        try {
+            val parsedVideo = VideoEmbedUtils.parseVideoUrl(videoUrl)
+            val mainRequest = CreatePostRequest(
+                userId = user.id,
+                type = "Video",
+                title = title?.takeIf { it.isNotBlank() } ?: "Video Post",
+                content = title?.takeIf { it.isNotBlank() } ?: "Shared a video link",
+                externalUrl = videoUrl
+            )
+            val res = SupabaseClient.api.createPost(mainRequest)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                val createdPost = res.body()!!.first()
+                val videoSubRequest = CreateVideoPostRequest(
+                    postId = createdPost.id,
+                    title = title?.takeIf { it.isNotBlank() },
+                    thumbnailUrl = thumbnailUrl?.takeIf { it.isNotBlank() },
+                    videoUrl = videoUrl,
+                    embedUrl = parsedVideo.embedUrl,
+                    platform = parsedVideo.platform,
+                    category = category,
+                    tags = tags
+                )
+                val subTableRecord = try {
+                    val subRes = SupabaseClient.api.createVideoPost(videoSubRequest)
+                    if (subRes.isSuccessful && !subRes.body().isNullOrEmpty()) subRes.body()!!.first() else null
+                } catch (_: Exception) { null }
+
+                val enriched = createdPost.copy(
+                    authorProfile = user,
+                    videoPosts = listOf(
+                        subTableRecord ?: VideoPost(
+                            postId = createdPost.id,
+                            title = title,
+                            thumbnailUrl = thumbnailUrl,
+                            videoUrl = videoUrl,
+                            embedUrl = parsedVideo.embedUrl,
+                            platform = parsedVideo.platform,
+                            category = category,
+                            tags = tags
+                        )
+                    )
+                )
+                Result.success(enriched)
+            } else {
+                Result.failure(Exception(res.errorBody()?.string() ?: "Failed to create video post"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createPhotoPost(
+        caption: String?,
+        photoUrls: List<String>,
+        category: String?,
+        tags: List<String>
+    ): Result<Post> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        if (photoUrls.isEmpty()) return@withContext Result.failure(Exception("Please add at least 1 photo URL"))
+        try {
+            val mainRequest = CreatePostRequest(
+                userId = user.id,
+                type = "Photo",
+                title = "Photo Gallery",
+                content = caption?.takeIf { it.isNotBlank() } ?: "Shared photo gallery",
+                externalUrl = photoUrls.firstOrNull()
+            )
+            val res = SupabaseClient.api.createPost(mainRequest)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                val createdPost = res.body()!!.first()
+                val photoSubRequest = CreatePhotoPostRequest(
+                    postId = createdPost.id,
+                    caption = caption?.takeIf { it.isNotBlank() },
+                    photoUrls = photoUrls,
+                    category = category,
+                    tags = tags
+                )
+                val subTableRecord = try {
+                    val subRes = SupabaseClient.api.createPhotoPost(photoSubRequest)
+                    if (subRes.isSuccessful && !subRes.body().isNullOrEmpty()) subRes.body()!!.first() else null
+                } catch (_: Exception) { null }
+
+                val enriched = createdPost.copy(
+                    authorProfile = user,
+                    photoPosts = listOf(
+                        subTableRecord ?: PhotoPost(
+                            postId = createdPost.id,
+                            caption = caption,
+                            photoUrls = photoUrls,
+                            category = category,
+                            tags = tags
+                        )
+                    )
+                )
+                Result.success(enriched)
+            } else {
+                Result.failure(Exception(res.errorBody()?.string() ?: "Failed to create photo post"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createTextPost(
+        caption: String,
+        templateId: String?,
+        category: String?,
+        tags: List<String>
+    ): Result<Post> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        if (caption.isBlank()) return@withContext Result.failure(Exception("Content cannot be empty"))
+        try {
+            val mainRequest = CreatePostRequest(
+                userId = user.id,
+                type = "Text",
+                title = "Thought",
+                content = caption
+            )
+            val res = SupabaseClient.api.createPost(mainRequest)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                val createdPost = res.body()!!.first()
+                val textSubRequest = CreateTextPostRequest(
+                    postId = createdPost.id,
+                    caption = caption,
+                    bgColor = templateId ?: "preset_default",
+                    category = category,
+                    tags = tags
+                )
+                val subTableRecord = try {
+                    val subRes = SupabaseClient.api.createTextPost(textSubRequest)
+                    if (subRes.isSuccessful && !subRes.body().isNullOrEmpty()) subRes.body()!!.first() else null
+                } catch (_: Exception) { null }
+
+                val enriched = createdPost.copy(
+                    authorProfile = user,
+                    textPosts = listOf(
+                        subTableRecord ?: TextPost(
+                            postId = createdPost.id,
+                            caption = caption,
+                            bgColor = templateId ?: "preset_default",
+                            category = category,
+                            tags = tags
+                        )
+                    )
+                )
+                Result.success(enriched)
+            } else {
+                Result.failure(Exception(res.errorBody()?.string() ?: "Failed to create text post"))
             }
         } catch (e: Exception) {
             Result.failure(e)

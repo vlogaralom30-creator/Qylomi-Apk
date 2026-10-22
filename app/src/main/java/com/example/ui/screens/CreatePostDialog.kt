@@ -18,14 +18,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -35,25 +43,32 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.data.model.UserProfile
-import com.example.ui.components.EmbeddedMediaPlayer
+import com.example.ui.components.EmbedVideoPlayer
+import com.example.ui.components.StyledTextPostCard
+import com.example.ui.components.TextPostTemplates
 import com.example.ui.components.UserAvatar
-import com.example.util.MediaParser
 import com.example.ui.theme.QCardBorder
+import com.example.ui.theme.QLikeRed
 import com.example.ui.theme.QOnSurface
 import com.example.ui.theme.QOnSurfaceVariant
 import com.example.ui.theme.QOnYellow
@@ -62,29 +77,59 @@ import com.example.ui.theme.QSurfaceVariant
 import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowLight
 import com.example.ui.theme.QYellowPrimary
+import com.example.util.VideoEmbedUtils
+
+enum class PostModeTab {
+    VIDEO, PHOTO, TEXT, GENERAL
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatePostBottomSheet(
     currentUser: UserProfile?,
     onDismiss: () -> Unit,
-    onPublish: (type: String, title: String?, content: String, url: String?, onDone: (Boolean, String?) -> Unit) -> Unit
+    onPublishGeneral: (type: String, title: String?, content: String, url: String?, onDone: (Boolean, String?) -> Unit) -> Unit,
+    onPublishVideo: (title: String?, videoUrl: String, thumbnailUrl: String?, category: String?, tags: List<String>, onDone: (Boolean, String?) -> Unit) -> Unit,
+    onPublishPhoto: (caption: String?, photoUrls: List<String>, category: String?, tags: List<String>, onDone: (Boolean, String?) -> Unit) -> Unit,
+    onPublishText: (caption: String, templateId: String?, category: String?, tags: List<String>, onDone: (Boolean, String?) -> Unit) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val types = listOf("Post", "Idea", "Tutorial", "Project", "Code", "Resource", "Question", "Tip", "Discovery")
-    var selectedType by remember { mutableStateOf("Post") }
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
-    var externalUrl by remember { mutableStateOf("") }
+    var currentTab by remember { mutableStateOf(PostModeTab.VIDEO) }
     var isPublishing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Video Post Form State
+    var videoTitle by remember { mutableStateOf("") }
+    var videoUrl by remember { mutableStateOf("") }
+    var videoThumbnailUrl by remember { mutableStateOf("") }
+    var videoCategory by remember { mutableStateOf("Technology") }
+
+    // Photo Post Form State
+    var photoCaption by remember { mutableStateOf("") }
+    var newPhotoInput by remember { mutableStateOf("") }
+    val photoUrlsList = remember { mutableStateListOf<String>() }
+    var photoCategory by remember { mutableStateOf("Photography") }
+
+    // Text Post Form State
+    var textCaption by remember { mutableStateOf("") }
+    var selectedTemplateId by remember { mutableStateOf("preset_default") }
+    var textCategory by remember { mutableStateOf("Thoughts") }
+
+    // General Legacy Form State
+    var generalType by remember { mutableStateOf("Post") }
+    var generalTitle by remember { mutableStateOf("") }
+    var generalContent by remember { mutableStateOf("") }
+    var generalUrl by remember { mutableStateOf("") }
+
+    // Tags
+    var tagsInput by remember { mutableStateOf("") }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = QSurface,
-        modifier = Modifier.fillMaxHeight(0.9f)
+        modifier = Modifier.fillMaxHeight(0.92f)
     ) {
         Column(
             modifier = Modifier
@@ -94,18 +139,18 @@ fun CreatePostBottomSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 6.dp)
         ) {
-            // Header
+            // Sheet Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = QOnSurface)
                 }
 
                 Text(
-                    text = "Create on Q",
+                    text = "Create Content",
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
                     color = QOnSurface
@@ -113,27 +158,60 @@ fun CreatePostBottomSheet(
 
                 Button(
                     onClick = {
-                        if (content.isBlank()) {
-                            errorMessage = "Please enter some content for your post"
-                            return@Button
-                        }
                         isPublishing = true
                         errorMessage = null
-                        onPublish(
-                            selectedType,
-                            title.takeIf { it.isNotBlank() },
-                            content,
-                            externalUrl.takeIf { it.isNotBlank() }
-                        ) { success, err ->
-                            isPublishing = false
-                            if (success) {
-                                onDismiss()
-                            } else {
-                                errorMessage = err ?: "Failed to publish"
+                        val parsedTags = tagsInput.split(" ", ",")
+                            .map { it.trim().removePrefix("#") }
+                            .filter { it.isNotBlank() }
+
+                        when (currentTab) {
+                            PostModeTab.VIDEO -> {
+                                if (videoUrl.isBlank()) {
+                                    errorMessage = "Please paste a video URL"
+                                    isPublishing = false
+                                    return@Button
+                                }
+                                onPublishVideo(videoTitle, videoUrl, videoThumbnailUrl, videoCategory, parsedTags) { success, err ->
+                                    isPublishing = false
+                                    if (success) onDismiss() else errorMessage = err ?: "Failed to post video"
+                                }
+                            }
+                            PostModeTab.PHOTO -> {
+                                if (photoUrlsList.isEmpty()) {
+                                    errorMessage = "Please add at least 1 photo URL"
+                                    isPublishing = false
+                                    return@Button
+                                }
+                                onPublishPhoto(photoCaption, photoUrlsList, photoCategory, parsedTags) { success, err ->
+                                    isPublishing = false
+                                    if (success) onDismiss() else errorMessage = err ?: "Failed to post photos"
+                                }
+                            }
+                            PostModeTab.TEXT -> {
+                                if (textCaption.isBlank()) {
+                                    errorMessage = "Please enter text for your post"
+                                    isPublishing = false
+                                    return@Button
+                                }
+                                onPublishText(textCaption, selectedTemplateId, textCategory, parsedTags) { success, err ->
+                                    isPublishing = false
+                                    if (success) onDismiss() else errorMessage = err ?: "Failed to post text"
+                                }
+                            }
+                            PostModeTab.GENERAL -> {
+                                if (generalContent.isBlank()) {
+                                    errorMessage = "Please enter post content"
+                                    isPublishing = false
+                                    return@Button
+                                }
+                                onPublishGeneral(generalType, generalTitle, generalContent, generalUrl) { success, err ->
+                                    isPublishing = false
+                                    if (success) onDismiss() else errorMessage = err ?: "Failed to publish post"
+                                }
                             }
                         }
                     },
-                    enabled = !isPublishing && content.isNotBlank(),
+                    enabled = !isPublishing,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = QYellowPrimary,
                         contentColor = QOnYellow
@@ -148,14 +226,14 @@ fun CreatePostBottomSheet(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Post", fontWeight = FontWeight.Bold)
+                        Text("Publish", fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
             HorizontalDivider(color = QCardBorder, modifier = Modifier.padding(vertical = 8.dp))
 
-            // Author info
+            // Author Info Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 UserAvatar(
                     avatarUrl = currentUser?.avatarUrl,
@@ -171,7 +249,7 @@ fun CreatePostBottomSheet(
                         color = QOnSurface
                     )
                     Text(
-                        text = "@${currentUser?.effectiveUsername ?: "user"} • Public",
+                        text = "@${currentUser?.effectiveUsername ?: "user"} • Public Post",
                         fontSize = 12.sp,
                         color = QOnSurfaceVariant
                     )
@@ -180,28 +258,381 @@ fun CreatePostBottomSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Post Type Chips (IdeaType from Datasetuse.md)
+            // Mode Selector Tabs (Video / Photo / Text / General)
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(QSurfaceVariant)
+                    .padding(4.dp)
             ) {
-                types.forEach { type ->
-                    val isSelected = selectedType == type
+                PostModeTab.values().forEach { tab ->
+                    val isSelected = currentTab == tab
+                    val (label, icon) = when (tab) {
+                        PostModeTab.VIDEO -> "Video" to Icons.Default.Movie
+                        PostModeTab.PHOTO -> "Photo" to Icons.Default.Image
+                        PostModeTab.TEXT -> "Text" to Icons.Default.FormatQuote
+                        PostModeTab.GENERAL -> "General" to Icons.Default.NoteAdd
+                    }
+
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
+                            .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) QYellowPrimary else QSurfaceVariant)
-                            .clickable { selectedType = type }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .background(if (isSelected) QYellowPrimary else Color.Transparent)
+                            .clickable {
+                                currentTab = tab
+                                errorMessage = null
+                            }
+                            .padding(vertical = 8.dp)
+                            .testTag("tab_${tab.name.lowercase()}")
                     ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = if (isSelected) QOnYellow else QOnSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) QOnYellow else QOnSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Dynamic Form UI Based on Selected Tab
+            when (currentTab) {
+                // 1. VIDEO POST FORM
+                PostModeTab.VIDEO -> {
+                    Column {
+                        OutlinedTextField(
+                            value = videoUrl,
+                            onValueChange = { videoUrl = it },
+                            label = { Text("Video URL (YouTube, TikTok, FB, IG)") },
+                            placeholder = { Text("https://www.youtube.com/watch?v=... or TikTok/IG link") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Movie, contentDescription = null, tint = QYellowDark)
+                            },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("video_url_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+
+                        // Auto-detection badge & Live Embed Player
+                        if (videoUrl.isNotBlank()) {
+                            val parsed = remember(videoUrl) { VideoEmbedUtils.parseVideoUrl(videoUrl) }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Auto-detected Platform: ${parsed.platformDisplayName}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QYellowDark
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            EmbedVideoPlayer(
+                                videoUrl = videoUrl,
+                                title = videoTitle.takeIf { it.isNotBlank() } ?: "Live Player Preview"
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = videoTitle,
+                            onValueChange = { videoTitle = it },
+                            label = { Text("Video Title (optional)") },
+                            placeholder = { Text("e.g. \"Building a Compose App in 10 minutes\"") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = videoThumbnailUrl,
+                            onValueChange = { videoThumbnailUrl = it },
+                            label = { Text("Custom Cover Thumbnail URL (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+                    }
+                }
+
+                // 2. PHOTO POST FORM
+                PostModeTab.PHOTO -> {
+                    Column {
+                        OutlinedTextField(
+                            value = photoCaption,
+                            onValueChange = { photoCaption = it },
+                            label = { Text("Caption") },
+                            placeholder = { Text("Describe your photo gallery...") },
+                            minLines = 2,
+                            maxLines = 4,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("photo_caption_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Add Photo Input Row
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = newPhotoInput,
+                                onValueChange = { newPhotoInput = it },
+                                label = { Text("Image URL") },
+                                placeholder = { Text("https://example.com/photo.jpg") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = QYellowPrimary,
+                                    unfocusedBorderColor = QCardBorder
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (newPhotoInput.isNotBlank()) {
+                                        photoUrlsList.add(newPhotoInput.trim())
+                                        newPhotoInput = ""
+                                    }
+                                },
+                                enabled = newPhotoInput.isNotBlank(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow
+                                ),
+                                modifier = Modifier.height(54.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Photo")
+                            }
+                        }
+
+                        // Photo Thumbnails List
+                        if (photoUrlsList.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Attached Photos (${photoUrlsList.size})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QOnSurface
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                            ) {
+                                photoUrlsList.forEachIndexed { idx, url ->
+                                    Box(
+                                        modifier = Modifier
+                                            .size(90.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(QSurfaceVariant)
+                                            .border(1.dp, QCardBorder, RoundedCornerShape(12.dp))
+                                    ) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(LocalContext.current)
+                                                .data(url)
+                                                .crossfade(true)
+                                                .build(),
+                                            contentDescription = "Photo Preview",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        // Remove Button
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(4.dp)
+                                                .size(22.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Black.copy(alpha = 0.7f))
+                                                .clickable { photoUrlsList.removeAt(idx) }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Remove photo",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. TEXT / THOUGHT POST FORM
+                PostModeTab.TEXT -> {
+                    Column {
+                        OutlinedTextField(
+                            value = textCaption,
+                            onValueChange = { textCaption = it },
+                            label = { Text("What's on your mind?") },
+                            placeholder = { Text("Share an idea, quote, or discussion point...") },
+                            minLines = 4,
+                            maxLines = 8,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("text_post_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Gradient Template Selector
                         Text(
-                            text = type,
+                            text = "Card Background Style",
                             fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) QOnYellow else QOnSurfaceVariant
+                            fontWeight = FontWeight.Bold,
+                            color = QOnSurface
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                        ) {
+                            TextPostTemplates.templates.forEach { tmpl ->
+                                val isSelected = selectedTemplateId == tmpl.id
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .width(110.dp)
+                                        .height(48.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(tmpl.backgroundBrush)
+                                        .border(
+                                            width = if (isSelected) 2.dp else 1.dp,
+                                            color = if (isSelected) QYellowPrimary else QCardBorder,
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable { selectedTemplateId = tmpl.id }
+                                        .padding(6.dp)
+                                ) {
+                                    Text(
+                                        text = tmpl.name,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = tmpl.textColor
+                                    )
+                                }
+                            }
+                        }
+
+                        // Live Card Preview
+                        if (textCaption.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Live Card Preview",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QYellowDark
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            StyledTextPostCard(
+                                content = textCaption,
+                                templateId = selectedTemplateId,
+                                category = textCategory
+                            )
+                        }
+                    }
+                }
+
+                // 4. GENERAL LEGACY POST FORM
+                PostModeTab.GENERAL -> {
+                    Column {
+                        OutlinedTextField(
+                            value = generalTitle,
+                            onValueChange = { generalTitle = it },
+                            placeholder = { Text("Title (e.g. \"Great AI tools to explore\")") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = generalContent,
+                            onValueChange = { generalContent = it },
+                            placeholder = { Text("Write your post content...") },
+                            minLines = 5,
+                            maxLines = 8,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = generalUrl,
+                            onValueChange = { generalUrl = it },
+                            label = { Text("External Link (optional)") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Link, contentDescription = null, tint = QYellowDark)
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = QYellowPrimary,
+                                unfocusedBorderColor = QCardBorder
+                            )
                         )
                     }
                 }
@@ -209,52 +640,12 @@ fun CreatePostBottomSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Title Field
+            // Tags Input
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                placeholder = { Text("Title (e.g. \"Great AI alternatives to explore\")") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("post_title_input"),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = QYellowPrimary,
-                    unfocusedBorderColor = QCardBorder
-                )
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Content Field
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                placeholder = { Text("What do you want to share with Q Creators?") },
-                minLines = 5,
-                maxLines = 10,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("post_content_input"),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = QYellowPrimary,
-                    unfocusedBorderColor = QCardBorder
-                )
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // External Link
-            OutlinedTextField(
-                value = externalUrl,
-                onValueChange = { externalUrl = it },
-                label = { Text("Video / Image / Embed URL (optional)") },
-                placeholder = { Text("YouTube, TikTok, Drive, or image/video link") },
-                leadingIcon = {
-                    Icon(Icons.Default.Link, contentDescription = null, tint = QYellowDark)
-                },
+                value = tagsInput,
+                onValueChange = { tagsInput = it },
+                label = { Text("#Tags & Keywords (optional)") },
+                placeholder = { Text("e.g. #android #kotlin #tech") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -264,34 +655,19 @@ fun CreatePostBottomSheet(
                 )
             )
 
-            // Live Media Preview if valid URL
-            if (externalUrl.isNotBlank()) {
-                val liveParsed = remember(externalUrl) { MediaParser.parseSingleUrl(externalUrl) }
-                if (liveParsed != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "Live Embed Preview",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = QYellowDark
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    EmbeddedMediaPlayer(media = liveParsed)
-                }
-            }
-
             if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = errorMessage ?: "",
-                    color = androidx.compose.ui.graphics.Color.Red,
-                    fontSize = 12.sp
+                    color = QLikeRed,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Points reward banner
+            // Creator Reward Banner
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -309,7 +685,7 @@ fun CreatePostBottomSheet(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Publishing earns +50 Creator Points towards your next rank!",
+                    text = "Publishing earns +50 Creator Points towards your rank!",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = QYellowDark

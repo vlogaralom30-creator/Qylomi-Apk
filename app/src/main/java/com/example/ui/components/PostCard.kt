@@ -180,44 +180,91 @@ fun PostCard(
                 )
             }
 
-            // Post Content & Read More feature
-            val cleanContent = remember(post.content) {
-                MediaParser.cleanContentText(post.content)
-            }
-            var isExpanded by remember { mutableStateOf(false) }
-            val isLongText = remember(cleanContent) {
-                cleanContent.length > 220 || cleanContent.lines().size > 4
-            }
+            // Post Content / Sub-Table Type Specific Rendering
+            val videoInfo = post.videoDetails
+            val photoInfo = post.photoDetails
+            val textInfo = post.textDetails
 
-            if (cleanContent.isNotBlank()) {
-                Text(
-                    text = cleanContent,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = QOnSurface,
-                    maxLines = if (isExpanded) Int.MAX_VALUE else 4,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (isLongText) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (isExpanded) "Show less" else "Read more...",
-                        color = QYellowDark,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .clickable { isExpanded = !isExpanded }
-                            .padding(vertical = 2.dp)
-                    )
+            when {
+                // 1. Video Post Sub-Table (or Type == "Video")
+                videoInfo != null || post.type.equals("Video", ignoreCase = true) -> {
+                    val urlToPlay = videoInfo?.videoUrl ?: post.externalUrl ?: ""
+                    if (urlToPlay.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        EmbedVideoPlayer(
+                            videoUrl = urlToPlay,
+                            title = videoInfo?.title ?: post.title
+                        )
+                    }
                 }
-            }
 
-            // Embedded Media Player (YouTube, TikTok, Google Drive, Direct Video, Direct Image, etc.)
-            val parsedMedia = remember(post) { MediaParser.parseMedia(post) }
-            if (parsedMedia != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                EmbeddedMediaPlayer(media = parsedMedia)
+                // 2. Photo Post Sub-Table (or Type == "Photo")
+                photoInfo != null || post.type.equals("Photo", ignoreCase = true) -> {
+                    val urls = photoInfo?.photoUrls?.takeIf { it.isNotEmpty() }
+                        ?: listOfNotNull(post.externalUrl?.takeIf { it.isNotBlank() })
+                    if (urls.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        PhotoPostGallery(
+                            photoUrls = urls,
+                            caption = photoInfo?.caption ?: post.content
+                        )
+                    }
+                }
+
+                // 3. Text / Thought Post Sub-Table (or Type == "Text")
+                textInfo != null || post.type.equals("Text", ignoreCase = true) -> {
+                    val caption = textInfo?.caption ?: post.content
+                    if (caption.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        StyledTextPostCard(
+                            content = caption,
+                            templateId = textInfo?.bgColor ?: "preset_default",
+                            category = textInfo?.category
+                        )
+                    }
+                }
+
+                // 4. Legacy / General Post Format
+                else -> {
+                    val cleanContent = remember(post.content) {
+                        MediaParser.cleanContentText(post.content)
+                    }
+                    var isExpanded by remember { mutableStateOf(false) }
+                    val isLongText = remember(cleanContent) {
+                        cleanContent.length > 220 || cleanContent.lines().size > 4
+                    }
+
+                    if (cleanContent.isNotBlank()) {
+                        Text(
+                            text = cleanContent,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = QOnSurface,
+                            maxLines = if (isExpanded) Int.MAX_VALUE else 4,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        if (isLongText) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isExpanded) "Show less" else "Read more...",
+                                color = QYellowDark,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                modifier = Modifier
+                                    .clickable { isExpanded = !isExpanded }
+                                    .padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // Embedded Media Player fallback (YouTube, TikTok, Drive, Direct Video/Image)
+                    val parsedMedia = remember(post) { MediaParser.parseMedia(post) }
+                    if (parsedMedia != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        EmbeddedMediaPlayer(media = parsedMedia)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

@@ -84,6 +84,7 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
     val trackingCount by viewModel.trackingCount.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val bannerMessage by viewModel.bannerMessage.collectAsState()
+    val savedAccounts by viewModel.savedAccounts.collectAsState()
 
     var currentTab by remember { mutableStateOf(SocialTab.FEED) }
     var isEditingProfile by remember { mutableStateOf(false) }
@@ -106,8 +107,16 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
             onSignUp = { email, pass, username, displayName, onDone ->
                 viewModel.signUp(email, pass, username, displayName, onDone)
             },
-            onSelectDemoUser = { profile ->
-                viewModel.loginAsDemoUser(profile)
+            savedAccounts = savedAccounts,
+            onSelectSavedAccount = { account ->
+                viewModel.login(account.email, account.pass) { success, err ->
+                    if (!success) {
+                        viewModel.setBanner(err ?: "Login failed for ${account.email}")
+                    }
+                }
+            },
+            onRemoveSavedAccount = { account ->
+                viewModel.removeSavedAccount(account)
             },
             onContinueAsGuest = {
                 val guestProfile = UserProfile(
@@ -120,8 +129,7 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                     points = 20
                 )
                 viewModel.loginAsDemoUser(guestProfile)
-            },
-            demoProfiles = allProfiles
+            }
         )
     } else {
         Scaffold(
@@ -300,8 +308,17 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                 CreatePostBottomSheet(
                     currentUser = currentUser,
                     onDismiss = { isCreatePostOpen = false },
-                    onPublish = { type, title, content, url, onDone ->
+                    onPublishGeneral = { type, title, content, url, onDone ->
                         viewModel.createPost(type, title, content, url, onDone)
+                    },
+                    onPublishVideo = { title, videoUrl, thumbnailUrl, category, tags, onDone ->
+                        viewModel.createVideoPost(title, videoUrl, thumbnailUrl, category, tags, onDone)
+                    },
+                    onPublishPhoto = { caption, photoUrls, category, tags, onDone ->
+                        viewModel.createPhotoPost(caption, photoUrls, category, tags, onDone)
+                    },
+                    onPublishText = { caption, templateId, category, tags, onDone ->
+                        viewModel.createTextPost(caption, templateId, category, tags, onDone)
                     }
                 )
             }

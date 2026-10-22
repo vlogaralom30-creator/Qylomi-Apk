@@ -20,9 +20,87 @@ data class Post(
     @Json(name = "attachments") val attachments: List<PostAttachment>? = emptyList(),
     @Json(name = "video_preview_urls") val videoPreviewUrls: List<String>? = emptyList(),
     @Json(name = "profiles") val authorProfile: UserProfile? = null,
+    @Json(name = "video_posts") val videoPosts: List<VideoPost>? = emptyList(),
+    @Json(name = "photo_posts") val photoPosts: List<PhotoPost>? = emptyList(),
+    @Json(name = "text_posts") val textPosts: List<TextPost>? = emptyList(),
     // Client-side interactions tracked from database
     val isLikedByMe: Boolean = false,
     val isBookmarkedByMe: Boolean = false
+) {
+    val videoDetails: VideoPost? get() = videoPosts?.firstOrNull()
+    val photoDetails: PhotoPost? get() = photoPosts?.firstOrNull()
+    val textDetails: TextPost? get() = textPosts?.firstOrNull()
+}
+
+// Sub-table model: video_posts
+@JsonClass(generateAdapter = true)
+data class VideoPost(
+    @Json(name = "id") val id: String = "",
+    @Json(name = "post_id") val postId: String = "",
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
+    @Json(name = "video_url") val videoUrl: String = "",
+    @Json(name = "embed_url") val embedUrl: String? = null,
+    @Json(name = "platform") val platform: String? = "direct",
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "tags") val tags: List<String>? = emptyList(),
+    @Json(name = "created_at") val createdAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateVideoPostRequest(
+    @Json(name = "post_id") val postId: String,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
+    @Json(name = "video_url") val videoUrl: String,
+    @Json(name = "embed_url") val embedUrl: String? = null,
+    @Json(name = "platform") val platform: String? = "direct",
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "tags") val tags: List<String>? = emptyList()
+)
+
+// Sub-table model: photo_posts
+@JsonClass(generateAdapter = true)
+data class PhotoPost(
+    @Json(name = "id") val id: String = "",
+    @Json(name = "post_id") val postId: String = "",
+    @Json(name = "caption") val caption: String? = null,
+    @Json(name = "photo_urls") val photoUrls: List<String> = emptyList(),
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "tags") val tags: List<String>? = emptyList(),
+    @Json(name = "created_at") val createdAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CreatePhotoPostRequest(
+    @Json(name = "post_id") val postId: String,
+    @Json(name = "caption") val caption: String? = null,
+    @Json(name = "photo_urls") val photoUrls: List<String>,
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "tags") val tags: List<String>? = emptyList()
+)
+
+// Sub-table model: text_posts
+@JsonClass(generateAdapter = true)
+data class TextPost(
+    @Json(name = "id") val id: String = "",
+    @Json(name = "post_id") val postId: String = "",
+    @Json(name = "caption") val caption: String = "",
+    @Json(name = "bg_color") val bgColor: String? = "preset_default",
+    @Json(name = "font_style") val fontStyle: String? = "default",
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "tags") val tags: List<String>? = emptyList(),
+    @Json(name = "created_at") val createdAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateTextPostRequest(
+    @Json(name = "post_id") val postId: String,
+    @Json(name = "caption") val caption: String,
+    @Json(name = "bg_color") val bgColor: String? = "preset_default",
+    @Json(name = "font_style") val fontStyle: String? = "default",
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "tags") val tags: List<String>? = emptyList()
 )
 
 @JsonClass(generateAdapter = true)
