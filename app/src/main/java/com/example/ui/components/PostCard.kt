@@ -181,11 +181,29 @@ fun PostCard(
             }
 
             // Post Content / Sub-Table Type Specific Rendering
+            val pixelArt = post.effectivePixelArt
             val videoInfo = post.videoDetails
             val photoInfo = post.photoDetails
             val textInfo = post.textDetails
 
             when {
+                // Pixel Art Vector Canvas
+                pixelArt != null -> {
+                    val cleanText = com.example.util.PixelArtUtils.stripPixelArtComment(post.content)
+                    if (cleanText.isNotBlank()) {
+                        Text(
+                            text = cleanText,
+                            fontSize = 14.sp,
+                            color = QOnSurface,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                    PixelArtViewer(
+                        data = pixelArt,
+                        title = post.title ?: "Hand-Drawn Pixel Art"
+                    )
+                }
+
                 // 1. Video Post Sub-Table (or Type == "Video")
                 videoInfo != null || post.type.equals("Video", ignoreCase = true) -> {
                     val urlToPlay = videoInfo?.videoUrl ?: post.externalUrl ?: ""

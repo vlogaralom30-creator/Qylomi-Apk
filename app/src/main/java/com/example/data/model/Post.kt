@@ -23,6 +23,7 @@ data class Post(
     @Json(name = "video_posts") val videoPosts: List<VideoPost>? = emptyList(),
     @Json(name = "photo_posts") val photoPosts: List<PhotoPost>? = emptyList(),
     @Json(name = "text_posts") val textPosts: List<TextPost>? = emptyList(),
+    @Json(name = "pixel_art") val pixelArt: PixelArtData? = null,
     // Client-side interactions tracked from database
     val isLikedByMe: Boolean = false,
     val isBookmarkedByMe: Boolean = false
@@ -30,6 +31,9 @@ data class Post(
     val videoDetails: VideoPost? get() = videoPosts?.firstOrNull()
     val photoDetails: PhotoPost? get() = photoPosts?.firstOrNull()
     val textDetails: TextPost? get() = textPosts?.firstOrNull()
+
+    val effectivePixelArt: PixelArtData?
+        get() = pixelArt ?: com.example.util.PixelArtUtils.extractPixelArt(content)
 }
 
 // Sub-table model: video_posts

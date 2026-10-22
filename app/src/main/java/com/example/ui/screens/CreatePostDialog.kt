@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Image
@@ -62,8 +63,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.data.model.PixelArtData
 import com.example.data.model.UserProfile
 import com.example.ui.components.EmbedVideoPlayer
+import com.example.ui.components.PixelArtCanvasStudio
+import com.example.ui.components.PixelArtViewer
 import com.example.ui.components.StyledTextPostCard
 import com.example.ui.components.TextPostTemplates
 import com.example.ui.components.UserAvatar
@@ -77,10 +81,11 @@ import com.example.ui.theme.QSurfaceVariant
 import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowLight
 import com.example.ui.theme.QYellowPrimary
+import com.example.util.PixelArtUtils
 import com.example.util.VideoEmbedUtils
 
 enum class PostModeTab {
-    VIDEO, PHOTO, TEXT, GENERAL
+    VIDEO, PHOTO, TEXT, PIXEL_ART, GENERAL
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -115,6 +120,9 @@ fun CreatePostBottomSheet(
     var textCaption by remember { mutableStateOf("") }
     var selectedTemplateId by remember { mutableStateOf("preset_default") }
     var textCategory by remember { mutableStateOf("Thoughts") }
+
+    // Pixel Art State
+    var attachedPixelArt by remember { mutableStateOf<PixelArtData?>(null) }
 
     // General Legacy Form State
     var generalType by remember { mutableStateOf("Post") }
@@ -198,6 +206,18 @@ fun CreatePostBottomSheet(
                                     if (success) onDismiss() else errorMessage = err ?: "Failed to post text"
                                 }
                             }
+                            PostModeTab.PIXEL_ART -> {
+                                if (attachedPixelArt == null || attachedPixelArt!!.pixels.isEmpty()) {
+                                    errorMessage = "Please draw something on the pixel canvas first"
+                                    isPublishing = false
+                                    return@Button
+                                }
+                                val injectedContent = PixelArtUtils.injectPixelArt("Hand-Drawn Pixel Art", attachedPixelArt!!)
+                                onPublishGeneral("PixelArt", "Pixel Art Drawing", injectedContent, null) { success, err ->
+                                    isPublishing = false
+                                    if (success) onDismiss() else errorMessage = err ?: "Failed to post pixel art"
+                                }
+                            }
                             PostModeTab.GENERAL -> {
                                 if (generalContent.isBlank()) {
                                     errorMessage = "Please enter post content"
@@ -272,6 +292,7 @@ fun CreatePostBottomSheet(
                         PostModeTab.VIDEO -> "Video" to Icons.Default.Movie
                         PostModeTab.PHOTO -> "Photo" to Icons.Default.Image
                         PostModeTab.TEXT -> "Text" to Icons.Default.FormatQuote
+                        PostModeTab.PIXEL_ART -> "Pixel Art" to Icons.Default.Brush
                         PostModeTab.GENERAL -> "General" to Icons.Default.NoteAdd
                     }
 
@@ -585,7 +606,34 @@ fun CreatePostBottomSheet(
                     }
                 }
 
-                // 4. GENERAL LEGACY POST FORM
+                // 4. PIXEL ART DRAWING STUDIO FORM
+                PostModeTab.PIXEL_ART -> {
+                    Column {
+                        PixelArtCanvasStudio(
+                            initialData = attachedPixelArt,
+                            onAttachArt = { art ->
+                                attachedPixelArt = art
+                            }
+                        )
+
+                        if (attachedPixelArt != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Attached Pixel Art Preview",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QYellowDark
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            PixelArtViewer(
+                                data = attachedPixelArt!!,
+                                title = "Attached Drawing (${attachedPixelArt!!.pixels.size} Strokes)"
+                            )
+                        }
+                    }
+                }
+
+                // 5. GENERAL LEGACY POST FORM
                 PostModeTab.GENERAL -> {
                     Column {
                         OutlinedTextField(
