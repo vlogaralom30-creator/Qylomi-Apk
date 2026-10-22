@@ -1,0 +1,6 @@
+{
+  "name": "Qylomi",
+  "description": "Modern social networking app with live feeds, user profiles, creator rewards, and Supabase integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
