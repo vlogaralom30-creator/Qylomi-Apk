@@ -57,6 +57,8 @@ class SocialRepository(
     private val followedUserIds = mutableSetOf<String>()
     private val likedPostIds = mutableSetOf<String>()
     private val savedPostIds = mutableSetOf<String>()
+    private val hiddenPostIds = mutableSetOf<String>()
+    private val likedCommentIds = mutableSetOf<String>()
 
     init {
         loadSavedAccounts()
@@ -186,6 +188,26 @@ class SocialRepository(
             resFollows.getOrNull()?.let { follows ->
                 followedUserIds.clear()
                 follows.forEach { followedUserIds.add(it.followingId) }
+            }
+        } catch (_: Exception) {}
+
+        // 4. Load hidden posts from hidden_posts
+        try {
+            val resHidden = SupabaseClient.api.getHiddenPostIds("eq.$userId")
+            if (resHidden.isSuccessful && resHidden.body() != null) {
+                hiddenPostIds.clear()
+                resHidden.body()!!.forEach { map ->
+                    map["post_id"]?.let { hiddenPostIds.add(it) }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 5. Load comment likes from comment_likes
+        try {
+            val resCommentLikes = SupabaseClient.api.getUserCommentLikes("eq.$userId")
+            if (resCommentLikes.isSuccessful && resCommentLikes.body() != null) {
+                likedCommentIds.clear()
+                resCommentLikes.body()!!.forEach { likedCommentIds.add(it.commentId) }
             }
         } catch (_: Exception) {}
     }
@@ -334,23 +356,27 @@ class SocialRepository(
         try {
             val res = SupabaseClient.api.getPosts(limit = 50)
             if (res.isSuccessful && res.body() != null) {
-                val posts = res.body()!!.map { post ->
-                    post.copy(
-                        isLikedByMe = likedPostIds.contains(post.id),
-                        isBookmarkedByMe = savedPostIds.contains(post.id)
-                    )
-                }
-                Result.success(posts)
-            } else {
-                // Fallback to legacy posts select query if sub-tables are not created in PostgREST schema yet
-                val legacyRes = SupabaseClient.api.getPostsLegacy(limit = 50)
-                if (legacyRes.isSuccessful && legacyRes.body() != null) {
-                    val posts = legacyRes.body()!!.map { post ->
+                val posts = res.body()!!
+                    .filter { !hiddenPostIds.contains(it.id) }
+                    .map { post ->
                         post.copy(
                             isLikedByMe = likedPostIds.contains(post.id),
                             isBookmarkedByMe = savedPostIds.contains(post.id)
                         )
                     }
+                Result.success(posts)
+            } else {
+                // Fallback to legacy posts select query if sub-tables are not created in PostgREST schema yet
+                val legacyRes = SupabaseClient.api.getPostsLegacy(limit = 50)
+                if (legacyRes.isSuccessful && legacyRes.body() != null) {
+                    val posts = legacyRes.body()!!
+                        .filter { !hiddenPostIds.contains(it.id) }
+                        .map { post ->
+                            post.copy(
+                                isLikedByMe = likedPostIds.contains(post.id),
+                                isBookmarkedByMe = savedPostIds.contains(post.id)
+                            )
+                        }
                     Result.success(posts)
                 } else {
                     Result.failure(Exception(res.errorBody()?.string() ?: "Failed to load posts"))
@@ -365,12 +391,15 @@ class SocialRepository(
         try {
             val res = SupabaseClient.api.getPostsByUser("eq.$userId", limit = 40)
             if (res.isSuccessful && res.body() != null) {
-                val posts = res.body()!!.map { post ->
-                    post.copy(
-                        isLikedByMe = likedPostIds.contains(post.id),
-                        isBookmarkedByMe = savedPostIds.contains(post.id)
-                    )
-                }
+                val posts = res.body()!!
+                    .filter { !hiddenPostIds.contains(it.id) }
+                    .map { post ->
+                        post.copy(
+                            isLikedByMe = likedPostIds.contains(post.id),
+                            isBookmarkedByMe = savedPostIds.contains(post.id)
+                        )
+                    }
+                    .sortedByDescending { it.isPinned }
                 Result.success(posts)
             } else {
                 Result.failure(Exception("Failed to load user posts"))
@@ -415,13 +444,19 @@ class SocialRepository(
         isVertical: Boolean? = false,
         category: String? = null,
         tags: List<String> = emptyList(),
-        groupId: String? = null
+        groupId: String? = null,
+        externalId: String? = null
     ): Result<Post> = withContext(Dispatchers.IO) {
         val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
         try {
-            val parsedVideo = VideoEmbedUtils.parseVideoUrl(videoUrl)
-            val effectiveEmbedUrl = embedUrl ?: parsedVideo.embedUrl
+            val parsedVideo = com.example.video.VideoPlatformRegistry.parse(videoUrl)
+            val effectiveEmbedUrl = embedUrl ?: if (parsedVideo.videoId != null && parsedVideo.platform == "youtube") {
+                "https://www.youtube.com/embed/${parsedVideo.videoId}"
+            } else {
+                parsedVideo.originalUrl
+            }
             val effectivePlatform = platform ?: parsedVideo.platform
+            val effectiveExternalId = externalId ?: parsedVideo.videoId
             val mainRequest = CreatePostRequest(
                 userId = user.id,
                 type = "Post", // Safe for posts_type_check constraint
@@ -435,6 +470,7 @@ class SocialRepository(
                 val createdPost = res.body()!!.first()
                 val videoSubRequest = CreateVideoPostRequest(
                     postId = createdPost.id,
+                    externalId = effectiveExternalId,
                     title = title?.takeIf { it.isNotBlank() },
                     thumbnailUrl = thumbnailUrl?.takeIf { it.isNotBlank() },
                     videoUrl = videoUrl,
@@ -459,6 +495,7 @@ class SocialRepository(
                     videoPosts = listOf(
                         subTableRecord ?: VideoPost(
                             postId = createdPost.id,
+                            externalId = effectiveExternalId,
                             title = title,
                             thumbnailUrl = thumbnailUrl,
                             videoUrl = videoUrl,
@@ -843,6 +880,180 @@ class SocialRepository(
         }
     }
 
+    // Post actions & Settings
+    suspend fun hidePost(postId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        hiddenPostIds.add(postId)
+        try {
+            SupabaseClient.api.hidePost(com.example.data.model.CreateHiddenPostRequest(userId = user.id, postId = postId))
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.success(true) // Optimistic hide
+        }
+    }
+
+    suspend fun unhidePost(postId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        hiddenPostIds.remove(postId)
+        try {
+            SupabaseClient.api.unhidePost("eq.${user.id}", "eq.$postId")
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.success(true)
+        }
+    }
+
+    suspend fun reportContent(postId: String?, commentId: String?, reason: String, details: String?): Result<Boolean> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
+        try {
+            val req = com.example.data.model.CreateReportRequest(
+                reporterId = user.id,
+                postId = postId,
+                commentId = commentId,
+                reason = reason,
+                details = details
+            )
+            val res = SupabaseClient.api.createReport(req)
+            if (res.isSuccessful) {
+                Result.success(true)
+            } else {
+                val err = res.errorBody()?.string() ?: ""
+                if (err.contains("unique") || err.contains("duplicate") || err.contains("23505")) {
+                    Result.failure(Exception("You have already reported this item."))
+                } else {
+                    Result.failure(Exception("Failed to submit report"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun togglePinPost(postId: String, isCurrentlyPinned: Boolean): Result<Post> = withContext(Dispatchers.IO) {
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val newIsPinned = !isCurrentlyPinned
+            val nowIso = if (newIsPinned) java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date()) else null
+            val req = com.example.data.model.UpdatePostRequest(isPinned = newIsPinned, pinnedAt = nowIso)
+            val res = SupabaseClient.api.updatePost("eq.$postId", req, userToken = token)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                Result.success(res.body()!!.first())
+            } else {
+                Result.failure(Exception("Failed to update post pin state"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun toggleAllowComments(postId: String, isCurrentlyAllowed: Boolean): Result<Post> = withContext(Dispatchers.IO) {
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val newAllow = !isCurrentlyAllowed
+            val req = com.example.data.model.UpdatePostRequest(allowComments = newAllow)
+            val res = SupabaseClient.api.updatePost("eq.$postId", req, userToken = token)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                Result.success(res.body()!!.first())
+            } else {
+                Result.failure(Exception("Failed to update comment settings"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPostLikers(postId: String, limit: Int = 30, offset: Int = 0): Result<List<com.example.data.model.PostReactionLiker>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getPostLikers("eq.$postId", limit = limit, offset = offset)
+            if (res.isSuccessful && res.body() != null) {
+                Result.success(res.body()!!)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Comment Likes & Actions
+    suspend fun getCommentLikers(commentId: String, limit: Int = 30, offset: Int = 0): Result<List<com.example.data.model.CommentLiker>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getCommentLikers("eq.$commentId", limit = limit, offset = offset)
+            if (res.isSuccessful && res.body() != null) {
+                Result.success(res.body()!!)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun toggleCommentLike(commentId: String): Boolean = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext false
+        val wasLiked = likedCommentIds.contains(commentId)
+        if (wasLiked) {
+            likedCommentIds.remove(commentId)
+            try {
+                SupabaseClient.api.removeCommentLike("eq.$commentId", "eq.${user.id}")
+            } catch (_: Exception) {}
+            false
+        } else {
+            likedCommentIds.add(commentId)
+            try {
+                SupabaseClient.api.addCommentLike(com.example.data.model.CreateCommentLikeRequest(commentId = commentId, userId = user.id))
+            } catch (_: Exception) {}
+            true
+        }
+    }
+
+    fun isCommentLikedByMe(commentId: String): Boolean = likedCommentIds.contains(commentId)
+
+    suspend fun updateComment(commentId: String, content: String): Result<Comment> = withContext(Dispatchers.IO) {
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val req = com.example.data.model.UpdateCommentRequest(content = content)
+            val res = SupabaseClient.api.updateComment("eq.$commentId", req, userToken = token)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                Result.success(res.body()!!.first())
+            } else {
+                Result.failure(Exception("Failed to edit comment"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteComment(commentId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val res = SupabaseClient.api.deleteComment("eq.$commentId", userToken = token)
+            if (res.isSuccessful) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("Failed to delete comment"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendNotificationRpc(recipientId: String, type: String, postId: String?, commentId: String?) = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext
+        if (user.id == recipientId) return@withContext // Do not notify yourself
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val payload = mapOf(
+                "p_recipient_id" to recipientId,
+                "p_actor_id" to user.id,
+                "p_type" to type,
+                "p_post_id" to postId,
+                "p_comment_id" to commentId
+            )
+            SupabaseClient.api.sendNotificationRpc(payload, userToken = token)
+        } catch (_: Exception) {}
+    }
+
     // 9. Communities / Groups
     suspend fun getGroups(): Result<List<com.example.data.model.GroupCommunity>> = withContext(Dispatchers.IO) {
         try {
@@ -1000,6 +1211,141 @@ class SocialRepository(
                 it.videoDetails != null || it.type.equals("Video", ignoreCase = true)
             }
             Result.success(videoPosts)
+        }
+    }
+
+    // ==========================================
+    // SEARCH & TAGS REPOSITORY METHODS
+    // ==========================================
+
+    fun sanitizeSearchQuery(query: String): String {
+        return query
+            .replace(Regex("[&|!()\\:'\"\\\\]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    suspend fun searchPosts(query: String, limit: Int = 20, offset: Int = 0): Result<List<Post>> = withContext(Dispatchers.IO) {
+        try {
+            val sanitized = sanitizeSearchQuery(query)
+            if (sanitized.isBlank()) return@withContext Result.success(emptyList())
+
+            val rpcRes = SupabaseClient.api.searchPostsRpc(com.example.data.model.SearchRpcRequest(q = sanitized, lim = limit, off = offset))
+            if (!rpcRes.isSuccessful || rpcRes.body() == null) {
+                return@withContext Result.success(emptyList())
+            }
+
+            val idResults = rpcRes.body()!!
+            if (idResults.isEmpty()) return@withContext Result.success(emptyList())
+
+            val postIds = idResults.map { it.id }
+            val inFilter = "in.(" + postIds.joinToString(",") + ")"
+            val postsRes = SupabaseClient.api.getPostsByIds(inFilter)
+
+            if (postsRes.isSuccessful && postsRes.body() != null) {
+                val rawPosts = postsRes.body()!!
+                val postMap = rawPosts.associateBy { it.id }
+                // Preserve RPC ranking order
+                val orderedPosts = postIds.mapNotNull { id -> postMap[id] }.map { post ->
+                    post.copy(
+                        isLikedByMe = likedPostIds.contains(post.id),
+                        isBookmarkedByMe = savedPostIds.contains(post.id)
+                    )
+                }
+                Result.success(orderedPosts)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun searchUsers(query: String, limit: Int = 20, offset: Int = 0): Result<List<UserProfile>> = withContext(Dispatchers.IO) {
+        try {
+            val sanitized = sanitizeSearchQuery(query)
+            if (sanitized.isBlank()) return@withContext Result.success(emptyList())
+
+            val rpcRes = SupabaseClient.api.searchUsersRpc(com.example.data.model.SearchRpcRequest(q = sanitized, lim = limit, off = offset))
+            if (rpcRes.isSuccessful && rpcRes.body() != null) {
+                val users = rpcRes.body()!!
+                Result.success(users)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun searchTags(query: String, limit: Int = 20, offset: Int = 0): Result<List<com.example.data.model.Tag>> = withContext(Dispatchers.IO) {
+        try {
+            val sanitized = sanitizeSearchQuery(query)
+            if (sanitized.isBlank()) return@withContext Result.success(emptyList())
+
+            val rpcRes = SupabaseClient.api.searchTagsRpc(com.example.data.model.SearchRpcRequest(q = sanitized, lim = limit, off = offset))
+            if (rpcRes.isSuccessful && rpcRes.body() != null) {
+                Result.success(rpcRes.body()!!)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getTrendingTags(): Result<List<com.example.data.model.Tag>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getTrendingTags()
+            if (res.isSuccessful && res.body() != null) {
+                Result.success(res.body()!!)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPostsByTag(tagId: String, tagName: String = "", limit: Int = 20, offset: Int = 0): Result<List<Post>> = withContext(Dispatchers.IO) {
+        try {
+            var actualTagId = tagId
+            if (actualTagId.isBlank() && tagName.isNotBlank()) {
+                val tagRes = SupabaseClient.api.getTagByName("eq.${tagName.lowercase().removePrefix("#")}")
+                if (tagRes.isSuccessful && !tagRes.body().isNullOrEmpty()) {
+                    actualTagId = tagRes.body()!![0].id
+                }
+            }
+
+            if (actualTagId.isBlank()) {
+                return@withContext Result.success(emptyList())
+            }
+
+            val embedRes = SupabaseClient.api.getPostIdsByTag(tagIdFilter = "eq.$actualTagId", limit = limit, offset = offset)
+            if (!embedRes.isSuccessful || embedRes.body() == null) {
+                return@withContext Result.success(emptyList())
+            }
+
+            val postIds = embedRes.body()!!.map { it.postId }.distinct()
+            if (postIds.isEmpty()) {
+                return@withContext Result.success(emptyList())
+            }
+
+            val inFilter = "in.(" + postIds.joinToString(",") + ")"
+            val postsRes = SupabaseClient.api.getPostsByIds(inFilter)
+            if (postsRes.isSuccessful && postsRes.body() != null) {
+                val posts = postsRes.body()!!.map { post ->
+                    post.copy(
+                        isLikedByMe = likedPostIds.contains(post.id),
+                        isBookmarkedByMe = savedPostIds.contains(post.id)
+                    )
+                }
+                Result.success(posts)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

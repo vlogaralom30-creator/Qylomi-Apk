@@ -36,6 +36,12 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     private val _isFeedLoading = MutableStateFlow(false)
     val isFeedLoading: StateFlow<Boolean> = _isFeedLoading.asStateFlow()
 
+    private val _isFeedRefreshing = MutableStateFlow(false)
+    val isFeedRefreshing: StateFlow<Boolean> = _isFeedRefreshing.asStateFlow()
+
+    private val _isProfileRefreshing = MutableStateFlow(false)
+    val isProfileRefreshing: StateFlow<Boolean> = _isProfileRefreshing.asStateFlow()
+
     private val _selectedCategory = MutableStateFlow("All")
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
 
@@ -143,6 +149,31 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
                 _feedPosts.value = list
             }
             _isFeedLoading.value = false
+        }
+    }
+
+    fun refreshFeed() {
+        viewModelScope.launch {
+            _isFeedRefreshing.value = true
+            val res = repository.getFeedPosts()
+            res.onSuccess { list ->
+                _feedPosts.value = list
+            }
+            loadSavedPosts()
+            _isFeedRefreshing.value = false
+        }
+    }
+
+    fun refreshProfile(userId: String) {
+        viewModelScope.launch {
+            _isProfileRefreshing.value = true
+            val res = repository.getUserPosts(userId)
+            res.onSuccess { list ->
+                _viewedUserPosts.value = list
+            }
+            loadSocialGraphCounts(userId)
+            loadSavedPosts()
+            _isProfileRefreshing.value = false
         }
     }
 

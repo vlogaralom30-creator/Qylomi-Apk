@@ -152,6 +152,13 @@ interface SupabaseApi {
         @Query("user_id") userIdFilter: String
     ): Response<Unit>
 
+    @GET("rest/v1/post_reactions?select=user_id,created_at,profiles:user_id(*)&order=created_at.desc")
+    suspend fun getPostLikers(
+        @Query("post_id") postIdFilter: String,
+        @Query("limit") limit: Int = 30,
+        @Query("offset") offset: Int = 0
+    ): Response<List<com.example.data.model.PostReactionLiker>>
+
     // 4. Table: comments (Threaded replies)
     // Note: Database trigger automatically updates posts.replies_count
     @GET("rest/v1/comments?select=*,profiles:user_id(*)&order=created_at.asc")
@@ -165,6 +172,76 @@ interface SupabaseApi {
         @Header("Prefer") prefer: String = "return=representation",
         @Header("Authorization") userToken: String? = null
     ): Response<List<Comment>>
+
+    @PATCH("rest/v1/comments")
+    suspend fun updateComment(
+        @Query("id") idFilter: String,
+        @Body updates: com.example.data.model.UpdateCommentRequest,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Comment>>
+
+    @DELETE("rest/v1/comments")
+    suspend fun deleteComment(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // Reports & Hidden Posts
+    @POST("rest/v1/reports")
+    suspend fun createReport(
+        @Body report: com.example.data.model.CreateReportRequest,
+        @Header("Prefer") prefer: String = "return=representation"
+    ): Response<Unit>
+
+    @POST("rest/v1/hidden_posts")
+    suspend fun hidePost(
+        @Body request: com.example.data.model.CreateHiddenPostRequest,
+        @Header("Prefer") prefer: String = "return=representation"
+    ): Response<Unit>
+
+    @DELETE("rest/v1/hidden_posts")
+    suspend fun unhidePost(
+        @Query("user_id") userIdFilter: String,
+        @Query("post_id") postIdFilter: String
+    ): Response<Unit>
+
+    @GET("rest/v1/hidden_posts?select=post_id")
+    suspend fun getHiddenPostIds(
+        @Query("user_id") userIdFilter: String
+    ): Response<List<Map<String, String>>>
+
+    // Comment Likes
+    @GET("rest/v1/comment_likes?select=*")
+    suspend fun getUserCommentLikes(
+        @Query("user_id") userIdFilter: String
+    ): Response<List<com.example.data.model.CommentLike>>
+
+    @POST("rest/v1/comment_likes")
+    suspend fun addCommentLike(
+        @Body like: com.example.data.model.CreateCommentLikeRequest,
+        @Header("Prefer") prefer: String = "return=representation"
+    ): Response<Unit>
+
+    @DELETE("rest/v1/comment_likes")
+    suspend fun removeCommentLike(
+        @Query("comment_id") commentIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<Unit>
+
+    @GET("rest/v1/comment_likes?select=user_id,created_at,profiles:user_id(*)&order=created_at.desc")
+    suspend fun getCommentLikers(
+        @Query("comment_id") commentIdFilter: String,
+        @Query("limit") limit: Int = 30,
+        @Query("offset") offset: Int = 0
+    ): Response<List<com.example.data.model.CommentLiker>>
+
+    // RPC: Notifications
+    @POST("rest/v1/rpc/send_notification")
+    suspend fun sendNotificationRpc(
+        @Body payload: Map<String, Any?>,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
 
     // 5. Table: saved_posts (Private bookmarks)
     @GET("rest/v1/saved_posts?select=*,posts(*,profiles:user_id(*))&order=created_at.desc")
@@ -263,4 +340,40 @@ interface SupabaseApi {
         @Query("group_id") groupIdFilter: String,
         @Query("user_id") userIdFilter: String
     ): Response<Unit>
+
+    // 10. Search & Tag Endpoints
+    @POST("rest/v1/rpc/search_posts")
+    suspend fun searchPostsRpc(
+        @Body request: com.example.data.model.SearchRpcRequest
+    ): Response<List<com.example.data.model.PostSearchIdResult>>
+
+    @POST("rest/v1/rpc/search_users")
+    suspend fun searchUsersRpc(
+        @Body request: com.example.data.model.SearchRpcRequest
+    ): Response<List<UserProfile>>
+
+    @POST("rest/v1/rpc/search_tags")
+    suspend fun searchTagsRpc(
+        @Body request: com.example.data.model.SearchRpcRequest
+    ): Response<List<com.example.data.model.Tag>>
+
+    @GET("rest/v1/tags?select=*&order=posts_count.desc&limit=15")
+    suspend fun getTrendingTags(): Response<List<com.example.data.model.Tag>>
+
+    @GET("rest/v1/tags?select=*")
+    suspend fun getTagByName(
+        @Query("name") nameFilter: String
+    ): Response<List<com.example.data.model.Tag>>
+
+    @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)")
+    suspend fun getPostsByIds(
+        @Query("id") idInFilter: String
+    ): Response<List<Post>>
+
+    @GET("rest/v1/post_tags?select=post_id&order=created_at.desc")
+    suspend fun getPostIdsByTag(
+        @Query("tag_id") tagIdFilter: String,
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
+    ): Response<List<com.example.data.model.PostTagEmbed>>
 }

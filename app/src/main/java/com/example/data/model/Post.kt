@@ -24,6 +24,9 @@ data class Post(
     @Json(name = "photo_posts") val photoPosts: List<PhotoPost>? = emptyList(),
     @Json(name = "text_posts") val textPosts: List<TextPost>? = emptyList(),
     @Json(name = "pixel_art") val pixelArt: PixelArtData? = null,
+    @Json(name = "allow_comments") val allowComments: Boolean = true,
+    @Json(name = "is_pinned") val isPinned: Boolean = false,
+    @Json(name = "pinned_at") val pinnedAt: String? = null,
     // Client-side interactions tracked from database
     val isLikedByMe: Boolean = false,
     val isBookmarkedByMe: Boolean = false
@@ -34,6 +37,18 @@ data class Post(
 
     val effectivePixelArt: PixelArtData?
         get() = pixelArt ?: com.example.util.PixelArtUtils.extractPixelArt(content)
+
+    val isEdited: Boolean
+        get() {
+            if (createdAt.isNullOrBlank() || updatedAt.isNullOrBlank()) return false
+            return try {
+                val created = java.time.Instant.parse(createdAt).toEpochMilli()
+                val updated = java.time.Instant.parse(updatedAt).toEpochMilli()
+                (updated - created) > 60000L
+            } catch (_: Exception) {
+                false
+            }
+        }
 }
 
 // Sub-table model: video_posts
@@ -41,6 +56,7 @@ data class Post(
 data class VideoPost(
     @Json(name = "id") val id: String = "",
     @Json(name = "post_id") val postId: String = "",
+    @Json(name = "external_id") val externalId: String? = null,
     @Json(name = "title") val title: String? = null,
     @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
     @Json(name = "video_url") val videoUrl: String = "",
@@ -60,6 +76,7 @@ data class VideoPost(
 @JsonClass(generateAdapter = true)
 data class CreateVideoPostRequest(
     @Json(name = "post_id") val postId: String,
+    @Json(name = "external_id") val externalId: String? = null,
     @Json(name = "title") val title: String? = null,
     @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
     @Json(name = "video_url") val videoUrl: String,
@@ -157,9 +174,73 @@ data class Comment(
     @Json(name = "user_id") val userId: String = "",
     @Json(name = "parent_id") val parentId: String? = null,
     @Json(name = "content") val content: String = "",
+    @Json(name = "likes_count") val likesCount: Int = 0,
     @Json(name = "created_at") val createdAt: String? = null,
     @Json(name = "updated_at") val updatedAt: String? = null,
-    @Json(name = "profiles") val authorProfile: UserProfile? = null
+    @Json(name = "profiles") val authorProfile: UserProfile? = null,
+    val isLikedByMe: Boolean = false
+) {
+    val isEdited: Boolean
+        get() {
+            if (createdAt.isNullOrBlank() || updatedAt.isNullOrBlank()) return false
+            return try {
+                val created = java.time.Instant.parse(createdAt).toEpochMilli()
+                val updated = java.time.Instant.parse(updatedAt).toEpochMilli()
+                (updated - created) > 60000L
+            } catch (_: Exception) {
+                false
+            }
+        }
+}
+
+
+@JsonClass(generateAdapter = true)
+data class UpdateCommentRequest(
+    @Json(name = "content") val content: String
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateReportRequest(
+    @Json(name = "reporter_id") val reporterId: String,
+    @Json(name = "post_id") val postId: String? = null,
+    @Json(name = "comment_id") val commentId: String? = null,
+    @Json(name = "reason") val reason: String,
+    @Json(name = "details") val details: String? = null,
+    @Json(name = "status") val status: String = "pending"
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateHiddenPostRequest(
+    @Json(name = "user_id") val userId: String,
+    @Json(name = "post_id") val postId: String
+)
+
+@JsonClass(generateAdapter = true)
+data class CommentLike(
+    @Json(name = "id") val id: String = "",
+    @Json(name = "comment_id") val commentId: String = "",
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "created_at") val createdAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateCommentLikeRequest(
+    @Json(name = "comment_id") val commentId: String,
+    @Json(name = "user_id") val userId: String
+)
+
+@JsonClass(generateAdapter = true)
+data class PostReactionLiker(
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "created_at") val createdAt: String? = null,
+    @Json(name = "profiles") val userProfile: UserProfile? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class CommentLiker(
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "created_at") val createdAt: String? = null,
+    @Json(name = "profiles") val userProfile: UserProfile? = null
 )
 
 @JsonClass(generateAdapter = true)

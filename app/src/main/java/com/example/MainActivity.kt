@@ -9,14 +9,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,12 +24,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.model.Post
 import com.example.data.model.UserProfile
+import com.example.ui.components.EditPostBottomSheet
+import com.example.ui.components.LikedByBottomSheet
+import com.example.ui.components.PostActionMenuBottomSheet
 import com.example.ui.components.QBottomNavBar
 import com.example.ui.components.QTopAppBar
 import com.example.ui.components.SocialTab
@@ -48,8 +47,13 @@ import com.example.ui.screens.ProfileScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.QBackground
 import com.example.ui.theme.QOnYellow
-import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowPrimary
+import androidx.compose.ui.platform.LocalContext
+import com.example.ui.screens.GlobalSearchOverlay
+import com.example.ui.screens.TagFeedScreen
+import com.example.ui.viewmodel.CommentsViewModel
+import com.example.ui.viewmodel.PostActionsViewModel
+import com.example.ui.viewmodel.SearchViewModel
 import com.example.ui.viewmodel.SocialViewModel
 import kotlinx.coroutines.delay
 
@@ -66,18 +70,22 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
+fun QSocialApp(
+    viewModel: SocialViewModel = viewModel(),
+    postActionsViewModel: PostActionsViewModel = viewModel(),
+    commentsViewModel: CommentsViewModel = viewModel(),
+    searchViewModel: SearchViewModel = viewModel()
+) {
+    val context = LocalContext.current
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val feedPosts by viewModel.feedPosts.collectAsState()
     val isFeedLoading by viewModel.isFeedLoading.collectAsState()
+    val isFeedRefreshing by viewModel.isFeedRefreshing.collectAsState()
+    val isProfileRefreshing by viewModel.isProfileRefreshing.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val allProfiles by viewModel.allProfiles.collectAsState()
-    val viewedProfile by viewModel.viewedProfile.collectAsState()
     val viewedUserPosts by viewModel.viewedUserPosts.collectAsState()
-    val selectedPostForComments by viewModel.selectedPostForComments.collectAsState()
-    val comments by viewModel.comments.collectAsState()
-    val isCommentsLoading by viewModel.isCommentsLoading.collectAsState()
     val notifications by viewModel.notifications.collectAsState()
     val savedPosts by viewModel.savedPosts.collectAsState()
     val trackersCount by viewModel.trackersCount.collectAsState()
@@ -91,6 +99,24 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
     val groupPosts by viewModel.groupPosts.collectAsState()
     val groupMembers by viewModel.groupMembers.collectAsState()
 
+    // Post Actions ViewModel State
+    val selectedPostForLikers by postActionsViewModel.selectedPostForLikers.collectAsState()
+    val postLikers by postActionsViewModel.postLikers.collectAsState()
+    val isLikersLoading by postActionsViewModel.isLikersLoading.collectAsState()
+
+    // Comments ViewModel State
+    val selectedPostForComments by commentsViewModel.selectedPost.collectAsState()
+    val comments by commentsViewModel.comments.collectAsState()
+    val isCommentsLoading by commentsViewModel.isLoading.collectAsState()
+    val commentSortOrder by commentsViewModel.sortOrder.collectAsState()
+    val replyToComment by commentsViewModel.replyToComment.collectAsState()
+    val editingComment by commentsViewModel.editingComment.collectAsState()
+
+    val selectedCommentForLikers by commentsViewModel.selectedCommentForLikers.collectAsState()
+    val commentLikers by commentsViewModel.commentLikers.collectAsState()
+    val isCommentLikersLoading by commentsViewModel.isCommentLikersLoading.collectAsState()
+
+    // UI state
     var currentTab by remember { mutableStateOf(SocialTab.FEED) }
     var isEditingProfile by remember { mutableStateOf(false) }
     var isCreatePostOpen by remember { mutableStateOf(false) }
@@ -98,7 +124,10 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
     var isGroupsScreenOpen by remember { mutableStateOf(false) }
     var selectedGroupForPost by remember { mutableStateOf<com.example.data.model.GroupCommunity?>(null) }
     var isReelsScreenOpen by remember { mutableStateOf(false) }
-    var selectedReelPost by remember { mutableStateOf<com.example.data.model.Post?>(null) }
+    var selectedReelPost by remember { mutableStateOf<Post?>(null) }
+
+    var selectedPostForMenu by remember { mutableStateOf<Post?>(null) }
+    var editingPost by remember { mutableStateOf<Post?>(null) }
 
     // Auto-dismiss banner after 3 seconds
     LaunchedEffect(bannerMessage) {
@@ -151,6 +180,9 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                         onReelsClick = {
                             selectedReelPost = null
                             isReelsScreenOpen = true
+                        },
+                        onSearchClick = {
+                            searchViewModel.openSearchOverlay()
                         },
                         onProfileClick = {
                             selectedUserProfile = null
@@ -209,14 +241,18 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                                 trackersCount = trackersCount,
                                 trackingCount = trackingCount,
                                 isOwnProfile = profile.id == currentUser?.id,
+                                isRefreshing = isProfileRefreshing,
+                                onRefresh = { viewModel.refreshProfile(profile.id) },
                                 onEditProfileClick = { isEditingProfile = true },
                                 onBackClick = { selectedUserProfile = null },
                                 onLogoutClick = { viewModel.logout() },
                                 onLikePost = { post -> viewModel.toggleLike(post) },
-                                onCommentPost = { post -> viewModel.openComments(post) },
+                                onCommentPost = { post -> commentsViewModel.openComments(post) },
                                 onBookmarkPost = { post -> viewModel.toggleBookmark(post) },
                                 onToggleFollow = { target -> viewModel.toggleFollow(target) },
-                                isFollowing = viewModel.isUserFollowed(profile.id)
+                                isFollowing = viewModel.isUserFollowed(profile.id),
+                                onOpenMenu = { post -> selectedPostForMenu = post },
+                                onLikersClick = { post -> postActionsViewModel.openLikers(post) }
                             )
                         }
                     }
@@ -232,13 +268,13 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                             onToggleJoin = { group -> viewModel.toggleJoinGroup(group) },
                             onOpenCreatePostForGroup = { group -> selectedGroupForPost = group },
                             onLikePost = { post -> viewModel.toggleLike(post) },
-                            onCommentPost = { post -> viewModel.openComments(post) },
+                            onCommentPost = { post -> commentsViewModel.openComments(post) },
                             onBookmarkPost = { post -> viewModel.toggleBookmark(post) },
                             onAuthorClick = { author ->
                                 selectedUserProfile = author
                                 viewModel.viewUserProfile(author)
                             },
-                            onEditPost = { post -> /* edit post */ },
+                            onEditPost = { post -> editingPost = post },
                             onDeletePost = { post -> viewModel.deletePost(post.id) { _, _ -> } }
                         )
                     }
@@ -261,23 +297,22 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                     else -> {
                         when (currentTab) {
                             SocialTab.FEED -> {
-                                var editingPost by remember { mutableStateOf<com.example.data.model.Post?>(null) }
-
                                 FeedScreen(
                                     posts = feedPosts,
                                     isLoading = isFeedLoading,
+                                    isRefreshing = isFeedRefreshing,
                                     currentUser = currentUser,
                                     allCreators = allProfiles,
                                     selectedCategory = selectedCategory,
                                     onCategorySelected = { cat -> viewModel.setCategory(cat) },
                                     onLikeClick = { post -> viewModel.toggleLike(post) },
-                                    onCommentClick = { post -> viewModel.openComments(post) },
+                                    onCommentClick = { post -> commentsViewModel.openComments(post) },
                                     onBookmarkClick = { post -> viewModel.toggleBookmark(post) },
                                     onAuthorClick = { author ->
                                         selectedUserProfile = author
                                         viewModel.viewUserProfile(author)
                                     },
-                                    onRefresh = { viewModel.loadFeed() },
+                                    onRefresh = { viewModel.refreshFeed() },
                                     onCreatePostClick = { isCreatePostOpen = true },
                                     onEditPostClick = { post -> editingPost = post },
                                     onDeletePostClick = { post ->
@@ -290,18 +325,10 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                                     onOpenReels = { post ->
                                         selectedReelPost = post
                                         isReelsScreenOpen = true
-                                    }
+                                    },
+                                    onOpenMenu = { post -> selectedPostForMenu = post },
+                                    onLikersClick = { post -> postActionsViewModel.openLikers(post) }
                                 )
-
-                                if (editingPost != null) {
-                                    com.example.ui.components.EditPostBottomSheet(
-                                        post = editingPost!!,
-                                        onDismiss = { editingPost = null },
-                                        onSaveEdit = { newContent, newTitle ->
-                                            viewModel.editPost(editingPost!!.id, newContent, newTitle) { _, _ -> }
-                                        }
-                                    )
-                                }
                             }
 
                             SocialTab.EXPLORE -> {
@@ -314,7 +341,8 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                                         viewModel.viewUserProfile(profile)
                                     },
                                     onToggleFollow = { profile -> viewModel.toggleFollow(profile) },
-                                    isFollowing = { id -> viewModel.isUserFollowed(id) }
+                                    isFollowing = { id -> viewModel.isUserFollowed(id) },
+                                    onOpenSearch = { query -> searchViewModel.openSearchOverlay(query) }
                                 )
                             }
 
@@ -337,14 +365,18 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                                         trackersCount = trackersCount,
                                         trackingCount = trackingCount,
                                         isOwnProfile = true,
+                                        isRefreshing = isProfileRefreshing,
+                                        onRefresh = { viewModel.refreshProfile(user.id) },
                                         onEditProfileClick = { isEditingProfile = true },
                                         onBackClick = { currentTab = SocialTab.FEED },
                                         onLogoutClick = { viewModel.logout() },
                                         onLikePost = { post -> viewModel.toggleLike(post) },
-                                        onCommentPost = { post -> viewModel.openComments(post) },
+                                        onCommentPost = { post -> commentsViewModel.openComments(post) },
                                         onBookmarkPost = { post -> viewModel.toggleBookmark(post) },
                                         onToggleFollow = { target -> viewModel.toggleFollow(target) },
-                                        isFollowing = false
+                                        isFollowing = false,
+                                        onOpenMenu = { post -> selectedPostForMenu = post },
+                                        onLikersClick = { post -> postActionsViewModel.openLikers(post) }
                                     )
                                 }
                             }
@@ -450,15 +482,189 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                 )
             }
 
+            // Post Action Menu Sheet
+            selectedPostForMenu?.let { post ->
+                val author = post.authorProfile
+                val isFollowingAuthor = author != null && viewModel.isUserFollowed(author.id)
+
+                PostActionMenuBottomSheet(
+                    post = post,
+                    currentUserId = currentUser?.id,
+                    isAuthorFollowing = isFollowingAuthor,
+                    onDismiss = { selectedPostForMenu = null },
+                    onEditClick = { editingPost = it },
+                    onDeleteClick = { postToDelete ->
+                        viewModel.deletePost(postToDelete.id) { success, err ->
+                            if (success) {
+                                viewModel.setBanner("Post deleted successfully")
+                            } else {
+                                viewModel.setBanner(err ?: "Failed to delete post")
+                            }
+                        }
+                    },
+                    onTogglePin = { targetPost ->
+                        postActionsViewModel.togglePin(targetPost) { success, msg ->
+                            if (success) {
+                                viewModel.setBanner(msg ?: "Pin updated")
+                                viewModel.loadFeed()
+                            } else {
+                                viewModel.setBanner(msg ?: "Failed to pin post")
+                            }
+                        }
+                    },
+                    onToggleAllowComments = { targetPost ->
+                        postActionsViewModel.toggleAllowComments(targetPost) { success, msg ->
+                            if (success) {
+                                viewModel.setBanner(msg ?: "Comments setting updated")
+                                viewModel.loadFeed()
+                            } else {
+                                viewModel.setBanner(msg ?: "Failed to update comments setting")
+                            }
+                        }
+                    },
+                    onToggleBookmark = { targetPost ->
+                        viewModel.toggleBookmark(targetPost)
+                    },
+                    onToggleFollow = { authorProfile ->
+                        viewModel.toggleFollow(authorProfile)
+                    },
+                    onViewProfile = { authorProfile ->
+                        selectedUserProfile = authorProfile
+                        viewModel.viewUserProfile(authorProfile)
+                    },
+                    onHidePost = { targetPost ->
+                        postActionsViewModel.hidePost(targetPost) {
+                            viewModel.setBanner("Post hidden. Refreshing feed...")
+                            viewModel.loadFeed()
+                        }
+                    },
+                    onReportPost = { targetPost, reason, details ->
+                        postActionsViewModel.submitReport(targetPost.id, null, reason, details) { success, msg ->
+                            viewModel.setBanner(msg)
+                        }
+                    },
+                    onShowBanner = { msg ->
+                        viewModel.setBanner(msg)
+                    }
+                )
+            }
+
+            // Edit Post Sheet
+            editingPost?.let { post ->
+                EditPostBottomSheet(
+                    post = post,
+                    onDismiss = { editingPost = null },
+                    onSaveEdit = { newContent, newTitle ->
+                        viewModel.editPost(post.id, newContent, newTitle) { success, err ->
+                            if (success) {
+                                viewModel.setBanner("Post updated successfully!")
+                                editingPost = null
+                            } else {
+                                viewModel.setBanner(err ?: "Failed to edit post")
+                            }
+                        }
+                    }
+                )
+            }
+
+            // Post Likers Sheet ("Liked by N")
+            selectedPostForLikers?.let { post ->
+                val users = postLikers.mapNotNull { it.userProfile }
+                LikedByBottomSheet(
+                    title = "Liked by (${users.size})",
+                    users = users,
+                    isLoading = isLikersLoading,
+                    currentUserId = currentUser?.id,
+                    onDismiss = { postActionsViewModel.closeLikers() },
+                    onUserClick = { profile ->
+                        selectedUserProfile = profile
+                        viewModel.viewUserProfile(profile)
+                    },
+                    onToggleFollow = { target ->
+                        viewModel.toggleFollow(target)
+                    },
+                    isFollowing = { id -> viewModel.isUserFollowed(id) }
+                )
+            }
+
+            // Comment Likers Sheet
+            selectedCommentForLikers?.let { comment ->
+                val users = commentLikers.mapNotNull { it.userProfile }
+                LikedByBottomSheet(
+                    title = "Comment Liked by (${users.size})",
+                    users = users,
+                    isLoading = isCommentLikersLoading,
+                    currentUserId = currentUser?.id,
+                    onDismiss = { commentsViewModel.closeCommentLikers() },
+                    onUserClick = { profile ->
+                        selectedUserProfile = profile
+                        viewModel.viewUserProfile(profile)
+                    },
+                    onToggleFollow = { target ->
+                        viewModel.toggleFollow(target)
+                    },
+                    isFollowing = { id -> viewModel.isUserFollowed(id) }
+                )
+            }
+
             // Comments BottomSheet
             selectedPostForComments?.let { post ->
                 CommentsBottomSheet(
                     post = post,
                     comments = comments,
                     isLoading = isCommentsLoading,
+                    sortOrder = commentSortOrder,
+                    replyToComment = replyToComment,
+                    editingComment = editingComment,
                     currentUser = currentUser,
-                    onDismiss = { viewModel.closeComments() },
-                    onAddComment = { text -> viewModel.addComment(text) {} }
+                    onDismiss = { commentsViewModel.closeComments() },
+                    onSortSelected = { order -> commentsViewModel.setSortOrder(order) },
+                    onReplyTo = { comment -> commentsViewModel.setReplyTo(comment) },
+                    onStartEditing = { comment -> commentsViewModel.setEditingComment(comment) },
+                    onAddComment = { text ->
+                        commentsViewModel.addComment(text) { success, err ->
+                            if (success) {
+                                viewModel.loadFeed()
+                            } else {
+                                viewModel.setBanner(err ?: "Failed to send comment")
+                            }
+                        }
+                    },
+                    onUpdateComment = { comment, newContent ->
+                        commentsViewModel.updateComment(comment.id, newContent) { success, err ->
+                            if (success) {
+                                viewModel.setBanner("Comment updated")
+                            } else {
+                                viewModel.setBanner(err ?: "Failed to update comment")
+                            }
+                        }
+                    },
+                    onDeleteComment = { comment ->
+                        commentsViewModel.deleteComment(comment.id) { success, err ->
+                            if (success) {
+                                viewModel.setBanner("Comment deleted")
+                                viewModel.loadFeed()
+                            } else {
+                                viewModel.setBanner(err ?: "Failed to delete comment")
+                            }
+                        }
+                    },
+                    onToggleCommentLike = { comment ->
+                        commentsViewModel.toggleCommentLike(comment)
+                    },
+                    onOpenCommentLikers = { comment ->
+                        commentsViewModel.openCommentLikers(comment)
+                    },
+                    onReportComment = { comment ->
+                        postActionsViewModel.submitReport(null, comment.id, "Inappropriate Comment", null) { _, msg ->
+                            viewModel.setBanner(msg)
+                        }
+                    },
+                    onAuthorClick = { author ->
+                        commentsViewModel.closeComments()
+                        selectedUserProfile = author
+                        viewModel.viewUserProfile(author)
+                    }
                 )
             }
 
@@ -478,7 +684,7 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                         viewModel.viewUserProfile(author)
                     },
                     onCommentClick = { post ->
-                        viewModel.openComments(post)
+                        commentsViewModel.openComments(post)
                     },
                     onToggleFollow = { author ->
                         viewModel.toggleFollow(author)
@@ -488,6 +694,50 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                         isReelsScreenOpen = false
                         isCreatePostOpen = true
                     }
+                )
+            }
+
+            // Global Search Full-Screen Overlay
+            val isSearchOverlayVisible by searchViewModel.isOverlayVisible.collectAsState()
+            if (isSearchOverlayVisible) {
+                GlobalSearchOverlay(
+                    viewModel = searchViewModel,
+                    currentUser = currentUser,
+                    onPostClick = { post -> },
+                    onUserClick = { user ->
+                        searchViewModel.closeSearchOverlay()
+                        selectedUserProfile = user
+                        viewModel.viewUserProfile(user)
+                    },
+                    onTagClick = { tag ->
+                        searchViewModel.openTagFeed(tag)
+                    },
+                    onLikeClick = { postId -> viewModel.toggleLike(Post(id = postId)) },
+                    onCommentClick = { post -> commentsViewModel.openComments(post) },
+                    onShareClick = { post -> postActionsViewModel.sharePost(context, post) },
+                    onOptionClick = { post -> selectedPostForMenu = post },
+                    onClose = { searchViewModel.closeSearchOverlay() }
+                )
+            }
+
+            // Tag Feed Full-Screen Overlay
+            val selectedTagForFeed by searchViewModel.selectedTagForFeed.collectAsState()
+            if (selectedTagForFeed != null) {
+                TagFeedScreen(
+                    viewModel = searchViewModel,
+                    currentUser = currentUser,
+                    onPostClick = { post -> },
+                    onUserClick = { user ->
+                        searchViewModel.closeTagFeed()
+                        searchViewModel.closeSearchOverlay()
+                        selectedUserProfile = user
+                        viewModel.viewUserProfile(user)
+                    },
+                    onLikeClick = { postId -> viewModel.toggleLike(Post(id = postId)) },
+                    onCommentClick = { post -> commentsViewModel.openComments(post) },
+                    onShareClick = { post -> postActionsViewModel.sharePost(context, post) },
+                    onOptionClick = { post -> selectedPostForMenu = post },
+                    onClose = { searchViewModel.closeTagFeed() }
                 )
             }
         }

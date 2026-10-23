@@ -417,10 +417,12 @@ fun CreatePostBottomSheet(
                             value = videoUrl,
                             onValueChange = {
                                 videoUrl = it
-                                // Typing does NOT start playback or auto-extract
+                                // Typing clears the old preview and resets state
+                                lastExtractedResult = null
+                                videoExtractorViewModel.reset()
                             },
                             label = { Text("Video URL (TikTok, YouTube, FB, IG, Direct)") },
-                            placeholder = { Text("Paste link: https://vt.tiktok.com/... or youtube.com") },
+                            placeholder = { Text("Paste link: youtube.com, youtu.be, tiktok.com...") },
                             leadingIcon = {
                                 Icon(Icons.Default.Movie, contentDescription = null, tint = QYellowDark)
                             },
@@ -451,6 +453,8 @@ fun CreatePostBottomSheet(
                                             clipboardManager.getText()?.text?.let { clipText ->
                                                 if (clipText.isNotBlank()) {
                                                     videoUrl = clipText.trim()
+                                                    lastExtractedResult = null
+                                                    videoExtractorViewModel.reset()
                                                 }
                                             }
                                         },
@@ -485,7 +489,7 @@ fun CreatePostBottomSheet(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = "Extracts direct video stream or player",
+                                text = "Extracts video player, title & metadata",
                                 fontSize = 12.sp,
                                 color = QOnSurfaceVariant,
                                 modifier = Modifier.weight(1f)
@@ -527,6 +531,42 @@ fun CreatePostBottomSheet(
                             }
                         }
 
+                        // Error Banner with Retry Button
+                        if (videoExtractionState is VideoExtractionState.Error) {
+                            val errorState = videoExtractionState as VideoExtractionState.Error
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Card(
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = QLikeRed.copy(alpha = 0.12f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = errorState.message,
+                                        color = QLikeRed,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = { videoExtractorViewModel.extractVideo(videoUrl) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = QLikeRed,
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Retry", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
                         // Extracted Preview Section
                         val result = lastExtractedResult
                         if (result != null) {
@@ -543,12 +583,20 @@ fun CreatePostBottomSheet(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(
-                                            text = "${result.platformDisplayName} Stream",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = QYellowDark
-                                        )
+                                        // Platform Chip
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(QYellowLight)
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = result.platformDisplayName.uppercase(),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = QYellowDark
+                                            )
+                                        }
 
                                         if (result.isDirectPlayable && !result.directVideoUrl.isNullOrBlank()) {
                                             Box(
@@ -578,24 +626,19 @@ fun CreatePostBottomSheet(
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    // Display player: Native player if direct video URL is ready, else EmbedVideoPlayer
-                                    if (result.isDirectPlayable && !result.directVideoUrl.isNullOrBlank()) {
-                                        NativeVideoPlayer(
-                                            videoUrl = result.directVideoUrl,
-                                            thumbnailUrl = result.thumbnailUrl,
-                                            isVertical = result.isVertical,
-                                            autoPlay = true,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(if (result.isVertical) 340.dp else 220.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                        )
-                                    } else {
-                                        EmbedVideoPlayer(
-                                            videoUrl = result.embedUrl,
-                                            title = videoTitle.takeIf { it.isNotBlank() } ?: result.title ?: "Live Preview"
-                                        )
-                                    }
+                                    // Render via unified VideoPlatformRegistry
+                                    val handler = com.example.video.VideoPlatformRegistry.resolve(result.originalUrl)
+                                    handler.Player(
+                                        video = result.toExtractedVideo(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        config = com.example.video.PlayerConfig(
+                                            autoPlay = false,
+                                            showControls = true
+                                        ),
+                                        controller = null
+                                    )
                                 }
                             }
                         }

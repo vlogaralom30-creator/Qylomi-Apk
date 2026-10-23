@@ -92,9 +92,23 @@ fun EmbeddedMediaPlayer(
                             .fillMaxWidth()
                             .aspectRatio(16f / 9f)
                     ) {
-                        InAppVideoWebView(
-                            url = media.embedUrl,
-                            modifier = Modifier.fillMaxSize()
+                        val ytHandler = com.example.video.VideoPlatformRegistry.resolve(media.url)
+                        val parsed = ytHandler.parse(media.url)
+                        val extracted = com.example.video.ExtractedVideo(
+                            platform = "youtube",
+                            videoId = parsed?.videoId,
+                            originalUrl = media.url,
+                            embedUrl = media.embedUrl ?: "",
+                            thumbnailUrl = media.thumbnailUrl,
+                            title = media.title,
+                            isVertical = parsed?.isShort == true,
+                            isShort = parsed?.isShort == true
+                        )
+                        ytHandler.Player(
+                            video = extracted,
+                            modifier = Modifier.fillMaxSize(),
+                            config = com.example.video.PlayerConfig(autoPlay = true, showControls = true),
+                            controller = null
                         )
                         Row(
                             modifier = Modifier

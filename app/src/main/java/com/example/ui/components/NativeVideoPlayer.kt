@@ -97,12 +97,37 @@ fun NativeVideoPlayer(
     var showPlayPauseIndicator by remember { mutableStateOf(false) }
     var retryTrigger by remember { mutableStateOf(0) }
 
+    val defaultRatio = aspectRatio ?: if (isVertical) (9f / 14f) else (16f / 9f)
+    var detectedAspectRatio by remember(playUrl) { mutableFloatStateOf(defaultRatio) }
+
     val exoPlayer = remember(context, retryTrigger) {
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
+
+        val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): androidx.media3.exoplayer.audio.AudioSink? {
+                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
+            }
+        }.apply {
+            setEnableAudioTrackPlaybackParams(true)
+        }
+
         val mediaSourceFactory = DefaultMediaSourceFactory(
             VideoPlayerCache.buildCacheDataSourceFactory(context)
         )
-        ExoPlayer.Builder(context)
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setAudioAttributes(audioAttributes, true)
+            .setHandleAudioBecomingNoisy(true)
             .build()
             .apply {
                 repeatMode = if (loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
@@ -125,6 +150,13 @@ fun NativeVideoPlayer(
         }
 
         val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    val rawRatio = videoSize.width.toFloat() / videoSize.height.toFloat()
+                    detectedAspectRatio = rawRatio.coerceIn(0.5f, 2.2f)
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_BUFFERING -> {
@@ -148,10 +180,33 @@ fun NativeVideoPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                isBuffering = false
-                val msg = error.localizedMessage ?: "Video playback error"
-                errorMessage = msg
-                onError(msg)
+                val causeString = (error.cause?.toString() ?: "") + " " + (error.cause?.javaClass?.name ?: "")
+                val msg = error.localizedMessage ?: error.message ?: "Video playback error"
+
+                val isAudioSinkError = causeString.contains("UnexpectedDiscontinuityException") ||
+                        causeString.contains("AudioSink") ||
+                        causeString.contains("AudioTrack") ||
+                        msg.contains("UnexpectedDiscontinuityException") ||
+                        msg.contains("AudioSink") ||
+                        msg.contains("AudioTrack") ||
+                        msg.contains("discontinuity") ||
+                        error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ||
+                        error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
+
+                if (isAudioSinkError) {
+                    // Non-fatal audio track timestamp discontinuity: flush audio sink and resume gracefully
+                    val currentPos = exoPlayer.currentPosition
+                    exoPlayer.playWhenReady = false
+                    exoPlayer.seekTo(if (currentPos > 100) currentPos else 0L)
+                    exoPlayer.prepare()
+                    if (autoPlay) {
+                        exoPlayer.playWhenReady = true
+                    }
+                } else {
+                    isBuffering = false
+                    errorMessage = msg
+                    onError(msg)
+                }
             }
         }
 
@@ -207,9 +262,9 @@ fun NativeVideoPlayer(
     }
 
     val boxModifier = if (aspectRatio != null && aspectRatio > 0f) {
-        modifier.aspectRatio(aspectRatio)
+        modifier.fillMaxWidth().aspectRatio(aspectRatio)
     } else {
-        modifier
+        modifier.fillMaxWidth().aspectRatio(detectedAspectRatio)
     }
 
     Box(

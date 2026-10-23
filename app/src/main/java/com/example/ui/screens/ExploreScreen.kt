@@ -63,7 +63,8 @@ fun ExploreScreen(
     onSearchChange: (String) -> Unit,
     onProfileClick: (UserProfile) -> Unit,
     onToggleFollow: (UserProfile) -> Unit,
-    isFollowing: (String) -> Boolean
+    isFollowing: (String) -> Boolean,
+    onOpenSearch: (String) -> Unit = {}
 ) {
     val trendingTopics = listOf("#ArtificialIntelligence", "#Programming", "#Tech", "#ContentCreator", "#Ideas", "#Design")
 
@@ -92,25 +93,35 @@ fun ExploreScreen(
                 .background(QSurface)
                 .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchChange,
-                placeholder = { Text("Search creators, skills, topics...", fontSize = 14.sp) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = QYellowDark)
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = QYellowPrimary,
-                    unfocusedBorderColor = QCardBorder,
-                    focusedContainerColor = QSurfaceVariant,
-                    unfocusedContainerColor = QSurfaceVariant
-                ),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("explore_search_input")
-            )
+                    .clickable { onOpenSearch(searchQuery) }
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = {
+                        onSearchChange(it)
+                        onOpenSearch(it)
+                    },
+                    placeholder = { Text("Search creators, skills, #tags...", fontSize = 14.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = "Search", tint = QYellowDark)
+                    },
+                    singleLine = true,
+                    enabled = false, // Tap opens global search overlay
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        disabledBorderColor = QCardBorder,
+                        disabledContainerColor = QSurfaceVariant,
+                        disabledTextColor = QOnSurface,
+                        disabledPlaceholderColor = QOnSurfaceVariant
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("explore_search_input")
+                )
+            }
         }
 
         LazyColumn(
@@ -152,7 +163,7 @@ fun ExploreScreen(
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(QSurface)
                                     .border(1.dp, QCardBorder, RoundedCornerShape(16.dp))
-                                    .clickable { onSearchChange(topic.removePrefix("#")) }
+                                    .clickable { onOpenSearch(topic) }
                                     .padding(horizontal = 12.dp, vertical = 7.dp)
                             ) {
                                 Text(

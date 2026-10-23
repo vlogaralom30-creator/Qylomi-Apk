@@ -27,23 +27,33 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Share
+import com.example.ui.theme.QOnYellow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.example.util.MediaParser
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +89,8 @@ fun PostCard(
     onEditPostClick: ((Post) -> Unit)? = null,
     onDeletePostClick: ((Post) -> Unit)? = null,
     onOpenReels: ((Post) -> Unit)? = null,
+    onOpenMenu: ((Post) -> Unit)? = null,
+    onLikersClick: ((Post) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -156,10 +168,37 @@ fun PostCard(
                             color = QOnSurfaceVariant
                         )
                         Text(
-                            text = formatTimeAgo(post.createdAt),
+                            text = "${formatTimeAgo(post.createdAt)}${if (post.isEdited) " (edited)" else ""}",
                             fontSize = 12.sp,
                             color = QOnSurfaceVariant
                         )
+                    }
+                }
+
+                // Pinned Badge
+                if (post.isPinned) {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(QYellowPrimary)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.PushPin,
+                                contentDescription = "Pinned",
+                                tint = QOnYellow,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Pinned",
+                                color = QOnYellow,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
@@ -180,21 +219,27 @@ fun PostCard(
                     }
                 }
 
-                // Owner Actions Menu (Edit & Delete)
-                if (isOwner) {
-                    Box {
-                        IconButton(
-                            onClick = { showMenu = true },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
-                                contentDescription = "More Options",
-                                tint = QOnSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                // Action Menu Button
+                Box {
+                    IconButton(
+                        onClick = {
+                            if (onOpenMenu != null) {
+                                onOpenMenu(post)
+                            } else {
+                                showMenu = true
+                            }
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
+                            contentDescription = "More Options",
+                            tint = QOnSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
 
+                    if (onOpenMenu == null && isOwner) {
                         androidx.compose.material3.DropdownMenu(
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false }
@@ -268,61 +313,172 @@ fun PostCard(
                     )
                 }
 
-                // 1. Video Post Sub-Table (or Type == "Video")
-                videoInfo != null || post.type.equals("Video", ignoreCase = true) -> {
-                    val directUrl = videoInfo?.directUrl?.takeIf { it.isNotBlank() }
-                    val urlToPlay = directUrl ?: videoInfo?.videoUrl ?: post.externalUrl ?: ""
+                // 1. Video Post Sub-Table (or Type == "Video" or externalUrl is a video link)
+                videoInfo != null || post.type.equals("Video", ignoreCase = true) || (!post.externalUrl.isNullOrBlank() && com.example.video.VideoPlatformRegistry.resolve(post.externalUrl).platformId != "direct") -> {
+                    val rawUrl = videoInfo?.videoUrl?.takeIf { it.isNotBlank() }
+                        ?: post.externalUrl?.takeIf { it.isNotBlank() }
+                        ?: videoInfo?.directUrl
+                        ?: ""
 
-                    if (urlToPlay.isNotBlank()) {
+                    if (rawUrl.isNotBlank()) {
+                        val handler = com.example.video.VideoPlatformRegistry.resolve(rawUrl)
+                        val parsed = handler.parse(rawUrl)
+                        val effectiveId = videoInfo?.externalId ?: parsed?.videoId
+                        val isShortOrVertical = videoInfo?.isVertical ?: (parsed?.isShort == true)
+                        val fallbackThumb = if (effectiveId != null && handler.platformId == "youtube") {
+                            "https://i.ytimg.com/vi/$effectiveId/hqdefault.jpg"
+                        } else null
+                        val thumb = videoInfo?.thumbnailUrl?.takeIf { it.isNotBlank() } ?: fallbackThumb
+
+                        val extractedVideo = com.example.video.ExtractedVideo(
+                            platform = videoInfo?.platform ?: handler.platformId,
+                            videoId = effectiveId,
+                            originalUrl = rawUrl,
+                            embedUrl = videoInfo?.embedUrl ?: if (effectiveId != null && handler.platformId == "youtube") "https://www.youtube.com/embed/$effectiveId" else rawUrl,
+                            directUrl = videoInfo?.directUrl,
+                            thumbnailUrl = thumb,
+                            title = videoInfo?.title ?: post.title,
+                            isVertical = isShortOrVertical,
+                            isShort = parsed?.isShort == true,
+                            durationSec = videoInfo?.durationSeconds,
+                            isNativePlayable = !videoInfo?.directUrl.isNullOrBlank()
+                        )
+
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        if (directUrl != null) {
-                            Box(modifier = Modifier.fillMaxWidth()) {
-                                NativeVideoPlayer(
-                                    videoUrl = directUrl,
-                                    thumbnailUrl = videoInfo.thumbnailUrl,
-                                    isVertical = videoInfo.isVertical ?: false,
-                                    autoPlay = false,
+                        var isPlayerActive by remember(post.id) {
+                            mutableStateOf(
+                                if (handler.platformId == "youtube") {
+                                    com.example.video.youtube.YouTubePlayerManager.AUTOPLAY_YOUTUBE_IN_FEED
+                                } else {
+                                    true
+                                }
+                            )
+                        }
+
+                        // Reclaim resources and explicitly pause video when card moves out of viewport or is disposed
+                        DisposableEffect(post.id, handler.platformId) {
+                            onDispose {
+                                if (handler.platformId == "youtube") {
+                                    isPlayerActive = false
+                                }
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    val parentBounds = coordinates.parentLayoutCoordinates?.boundsInWindow()
+                                    val windowHeight = parentBounds?.height ?: 2400f
+                                    val bounds = coordinates.boundsInWindow()
+                                    val isVisible = bounds.bottom > 0f && bounds.top < windowHeight
+                                    if (!isVisible && handler.platformId == "youtube") {
+                                        isPlayerActive = false
+                                    }
+                                }
+                        ) {
+
+                            if (handler.platformId == "youtube" && !isPlayerActive) {
+                                // YouTube Thumbnail Card with Red Play Button Overlay
+                                Box(
+                                    contentAlignment = Alignment.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(if (videoInfo.isVertical == true) 360.dp else 220.dp)
+                                        .aspectRatio(if (isShortOrVertical) 9f / 14f else 16f / 9f)
                                         .clip(RoundedCornerShape(12.dp))
-                                )
+                                        .background(Color.Black)
+                                        .clickable { isPlayerActive = true }
+                                ) {
+                                    if (!thumb.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = thumb,
+                                            contentDescription = post.title ?: "YouTube Video",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(alpha = 0.28f))
+                                        )
+                                    }
 
-                                // Open in Reels badge for vertical or direct video posts
-                                if (onOpenReels != null) {
+                                    // High-Contrast Red Play Button
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(QLikeRed)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Play YouTube",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(34.dp)
+                                        )
+                                    }
+
+                                    // Platform Badge
                                     Box(
                                         modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(8.dp)
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .background(Color.Black.copy(alpha = 0.65f))
-                                            .clickable { onOpenReels(post) }
-                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                            .align(Alignment.TopStart)
+                                            .padding(10.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color.Black.copy(alpha = 0.75f))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.Movie,
-                                                contentDescription = "Open in Reels",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Reels",
-                                                color = Color.White,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
+                                        Text(
+                                            text = if (parsed?.isShort == true) "YOUTUBE SHORTS" else "YOUTUBE",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+                            } else {
+                                handler.Player(
+                                    video = extractedVideo,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp)),
+                                    config = com.example.video.PlayerConfig(
+                                        autoPlay = isPlayerActive,
+                                        showControls = true
+                                    ),
+                                    controller = null
+                                )
+                            }
+
+                            // Open in Reels badge for vertical video posts
+                            if (isShortOrVertical && onOpenReels != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(Color.Black.copy(alpha = 0.65f))
+                                        .clickable { onOpenReels(post) }
+                                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Movie,
+                                            contentDescription = "Open in Reels",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Reels",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
-                        } else {
-                            EmbedVideoPlayer(
-                                videoUrl = urlToPlay,
-                                title = videoInfo?.title ?: post.title
-                            )
                         }
                     }
                 }
@@ -415,7 +571,6 @@ fun PostCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable { onLikeClick() }
                         .padding(horizontal = 6.dp, vertical = 6.dp)
                         .testTag("like_button_${post.id}")
                 ) {
@@ -423,14 +578,23 @@ fun PostCard(
                         imageVector = if (post.isLikedByMe) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Like",
                         tint = heartTint,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier
+                            .size(19.dp)
+                            .clickable { onLikeClick() }
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
                         text = "${post.appreciationsCount}",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = heartTint
+                        color = heartTint,
+                        modifier = Modifier.clickable {
+                            if (onLikersClick != null) {
+                                onLikersClick(post)
+                            } else {
+                                onLikeClick()
+                            }
+                        }
                     )
                 }
 

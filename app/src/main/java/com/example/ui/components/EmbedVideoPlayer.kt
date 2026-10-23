@@ -156,7 +156,25 @@ fun EmbedVideoPlayer(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                if (detectedInfo.embedUrl.isNotBlank() && !hasError) {
+                if (detectedInfo.platform == "youtube") {
+                    val ytHandler = com.example.video.VideoPlatformRegistry.resolve(videoUrl)
+                    val parsed = ytHandler.parse(videoUrl)
+                    val extracted = com.example.video.ExtractedVideo(
+                        platform = "youtube",
+                        videoId = parsed?.videoId,
+                        originalUrl = videoUrl,
+                        embedUrl = detectedInfo.embedUrl,
+                        title = title,
+                        isVertical = parsed?.isShort == true,
+                        isShort = parsed?.isShort == true
+                    )
+                    ytHandler.Player(
+                        video = extracted,
+                        modifier = Modifier.fillMaxSize(),
+                        config = com.example.video.PlayerConfig(autoPlay = false, showControls = true),
+                        controller = null
+                    )
+                } else if (detectedInfo.embedUrl.isNotBlank() && !hasError) {
                     AndroidView(
                         factory = { ctx ->
                             WebView(ctx).apply {

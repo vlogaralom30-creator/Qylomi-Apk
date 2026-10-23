@@ -89,7 +89,98 @@ import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowLight
 import com.example.ui.theme.QYellowPrimary
 
-@OptIn(ExperimentalLayoutApi::class)
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+
+@Composable
+private fun StatItem(count: Int, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "$count",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = QOnSurface
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = QOnSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label, fontSize = 13.sp, color = QOnSurfaceVariant)
+        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = QOnSurface)
+    }
+}
+
+@Composable
+private fun PointsHistoryCard(item: PointsHistoryItem) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = QSurface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
+        ) {
+            val isPositive = (item.points ?: 0) >= 0
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (isPositive) QRelayGreen.copy(alpha = 0.15f) else QLikeRed.copy(alpha = 0.15f))
+            ) {
+                Text(
+                    text = if (isPositive) "+${item.points}" else "${item.points}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPositive) QRelayGreen else QLikeRed
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.description ?: item.action ?: "Points Update",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = QOnSurface
+                )
+                Text(
+                    text = formatTimeAgo(item.createdAt),
+                    fontSize = 11.sp,
+                    color = QOnSurfaceVariant
+                )
+            }
+
+            item.balanceAfter?.let { bal ->
+                Text(
+                    text = "$bal pts",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = QYellowDark
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProfileScreen(
     profile: UserProfile,
@@ -99,6 +190,8 @@ fun ProfileScreen(
     trackersCount: Int = 0,
     trackingCount: Int = 0,
     isOwnProfile: Boolean,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
     onEditProfileClick: () -> Unit,
     onBackClick: () -> Unit,
     onLogoutClick: () -> Unit,
@@ -106,7 +199,9 @@ fun ProfileScreen(
     onCommentPost: (Post) -> Unit,
     onBookmarkPost: (Post) -> Unit,
     onToggleFollow: (UserProfile) -> Unit,
-    isFollowing: Boolean
+    isFollowing: Boolean,
+    onOpenMenu: ((Post) -> Unit)? = null,
+    onLikersClick: ((Post) -> Unit)? = null
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -116,13 +211,18 @@ fun ProfileScreen(
         onBackClick()
     }
 
-    LazyColumn(
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .background(QBackground)
-            .testTag("profile_screen"),
-        contentPadding = PaddingValues(bottom = 90.dp)
+            .testTag("profile_screen")
     ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 90.dp)
+        ) {
         // Profile Header (Cover Banner + Overlapping Avatar + Info Card)
         item {
             Box(
@@ -613,7 +713,10 @@ fun ProfileScreen(
                                 onLikeClick = { onLikePost(post) },
                                 onCommentClick = { onCommentPost(post) },
                                 onBookmarkClick = { onBookmarkPost(post) },
-                                onAuthorClick = {}
+                                onAuthorClick = {},
+                                currentUserId = currentUser?.id,
+                                onOpenMenu = onOpenMenu,
+                                onLikersClick = onLikersClick
                             )
                         }
                     }
@@ -646,7 +749,10 @@ fun ProfileScreen(
                                 onLikeClick = { onLikePost(post) },
                                 onCommentClick = { onCommentPost(post) },
                                 onBookmarkClick = { onBookmarkPost(post) },
-                                onAuthorClick = {}
+                                onAuthorClick = {},
+                                currentUserId = currentUser?.id,
+                                onOpenMenu = onOpenMenu,
+                                onLikersClick = onLikersClick
                             )
                         }
                     }
@@ -706,91 +812,6 @@ fun ProfileScreen(
         }
     }
 }
-
-@Composable
-private fun StatItem(count: Int, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "$count",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = QOnSurface
-        )
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            color = QOnSurfaceVariant
-        )
-    }
 }
 
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, fontSize = 13.sp, color = QOnSurfaceVariant)
-        Text(text = value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = QOnSurface)
-    }
-}
 
-@Composable
-private fun PointsHistoryCard(item: PointsHistoryItem) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = QSurface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 4.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            val isPositive = (item.points ?: 0) >= 0
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(if (isPositive) QRelayGreen.copy(alpha = 0.15f) else QLikeRed.copy(alpha = 0.15f))
-            ) {
-                Text(
-                    text = if (isPositive) "+${item.points}" else "${item.points}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isPositive) QRelayGreen else QLikeRed
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.description ?: item.action ?: "Points Update",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = QOnSurface
-                )
-                Text(
-                    text = formatTimeAgo(item.createdAt),
-                    fontSize = 11.sp,
-                    color = QOnSurfaceVariant
-                )
-            }
-
-            item.balanceAfter?.let { bal ->
-                Text(
-                    text = "$bal pts",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = QYellowDark
-                )
-            }
-        }
-    }
-}

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #player-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        iframe, #player {
+            width: 100% !important;
+            height: 100% !important;
+            border: 0;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="player-container">
+        <div id="player"></div>
+    </div>
+
+    <script>
+        var player = null;
+        var progressInterval = null;
+        var videoId = '__VIDEO_ID__';
+        var autoPlay = __AUTOPLAY__;
+        var muted = __MUTED__;
+        var loop = __LOOP__;
+        var controls = __CONTROLS__;
+        var startSeconds = __START_SECONDS__;
+        var originHost = '__ORIGIN__';
+
+        function startProgressTracking() {
+            stopProgressTracking();
+            progressInterval = setInterval(function() {
+                try {
+                    if (player && typeof player.getPlayerState === 'function' && player.getPlayerState() === 1) {
+                        var curr = player.getCurrentTime() || 0;
+                        var dur = player.getDuration() || 0;
+                        if (window.YtBridge && window.YtBridge.onProgress) {
+                            window.YtBridge.onProgress(curr, dur);
+                        }
+                    }
+                } catch(e) {}
+            }, 500);
+        }
+
+        function stopProgressTracking() {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+        }
+
+        // 1. Asynchronously load the YouTube IFrame Player API
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        // 2. Callback when API is ready
+        function onYouTubeIframeAPIReady() {
+            var playerVars = {
+                'playsinline': 1,
+                'rel': 0,
+                'modestbranding': 1,
+                'controls': controls,
+                'enablejsapi': 1,
+                'origin': originHost,
+                'start': startSeconds,
+                'iv_load_policy': 3,
+                'fs': 1
+            };
+
+            if (loop === 1) {
+                playerVars['loop'] = 1;
+                playerVars['playlist'] = videoId;
+            }
+
+            try {
+                player = new YT.Player('player', {
+                    videoId: videoId,
+                    width: '100%',
+                    height: '100%',
+                    playerVars: playerVars,
+                    events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange,
+                        'onError': onPlayerError
+                    }
+                });
+            } catch (err) {
+                if (window.YtBridge && window.YtBridge.onError) {
+                    window.YtBridge.onError(5);
+                }
+            }
+        }
+
+        function onPlayerReady(event) {
+            if (muted === 1 && player && player.mute) {
+                player.mute();
+            }
+            if (autoPlay === 1 && player && player.playVideo) {
+                try {
+                    var promise = player.playVideo();
+                    if (promise && typeof promise.catch === 'function') {
+                        promise.catch(function() {
+                            if (window.YtBridge && window.YtBridge.onAutoplayBlocked) {
+                                window.YtBridge.onAutoplayBlocked();
+                            }
+                        });
+                    }
+                } catch(e) {}
+            }
+            if (window.YtBridge && window.YtBridge.onReady) {
+                window.YtBridge.onReady();
+            }
+        }
+
+        function onPlayerStateChange(event) {
+            var state = event.data;
+            if (state === 1) { // Playing
+                startProgressTracking();
+            } else {
+                stopProgressTracking();
+            }
+            if (window.YtBridge && window.YtBridge.onStateChange) {
+                window.YtBridge.onStateChange(state);
+            }
+        }
+
+        function onPlayerError(event) {
+            stopProgressTracking();
+            if (window.YtBridge && window.YtBridge.onError) {
+                window.YtBridge.onError(event.data);
+            }
+        }
+
+        // Bridge invocable functions from Kotlin
+        function playVideo() {
+            if (player && typeof player.playVideo === 'function') {
+                player.playVideo();
+            }
+        }
+
+        function pauseVideo() {
+            if (player && typeof player.pauseVideo === 'function') {
+                player.pauseVideo();
+            }
+        }
+
+        function muteVideo() {
+            if (player && typeof player.mute === 'function') {
+                player.mute();
+            }
+        }
+
+        function unMuteVideo() {
+            if (player && typeof player.unMute === 'function') {
+                player.unMute();
+            }
+        }
+
+        function seekTo(sec, allowSeekAhead) {
+            if (player && typeof player.seekTo === 'function') {
+                player.seekTo(sec, allowSeekAhead !== false);
+            }
+        }
+
+        function loadVideo(newVideoId, startSec) {
+            videoId = newVideoId;
+            startSeconds = startSec || 0;
+            if (player && typeof player.loadVideoById === 'function') {
+                player.loadVideoById({
+                    'videoId': newVideoId,
+                    'startSeconds': startSeconds
+                });
+            }
+        }
+    </script>
+</body>
+</html>

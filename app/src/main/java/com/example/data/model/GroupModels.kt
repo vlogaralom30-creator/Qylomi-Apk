@@ -54,6 +54,10 @@ data class JoinGroupRequest(
 @JsonClass(generateAdapter = true)
 data class UpdatePostRequest(
     @Json(name = "title") val title: String? = null,
-    @Json(name = "content") val content: String,
-    @Json(name = "external_url") val externalUrl: String? = null
+    @Json(name = "content") val content: String? = null,
+    @Json(name = "type") val type: String? = null,
+    @Json(name = "external_url") val externalUrl: String? = null,
+    @Json(name = "allow_comments") val allowComments: Boolean? = null,
+    @Json(name = "is_pinned") val isPinned: Boolean? = null,
+    @Json(name = "pinned_at") val pinnedAt: String? = null
 )

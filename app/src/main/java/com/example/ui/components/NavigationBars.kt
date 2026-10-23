@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
@@ -62,6 +63,7 @@ fun QTopAppBar(
     onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit,
     onReelsClick: (() -> Unit)? = null,
+    onSearchClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -105,6 +107,24 @@ fun QTopAppBar(
 
         // Right Action Items
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Search button
+            if (onSearchClick != null) {
+                IconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("top_search_button")
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = QOnSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(2.dp))
+            }
+
             // Reels button
             if (onReelsClick != null) {
                 IconButton(

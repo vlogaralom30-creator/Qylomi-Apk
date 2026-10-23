@@ -68,10 +68,15 @@ import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowLight
 import com.example.ui.theme.QYellowPrimary
 
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     posts: List<Post>,
     isLoading: Boolean,
+    isRefreshing: Boolean,
     currentUser: UserProfile?,
     allCreators: List<UserProfile>,
     selectedCategory: String,
@@ -85,7 +90,9 @@ fun FeedScreen(
     onEditPostClick: (Post) -> Unit = {},
     onDeletePostClick: (Post) -> Unit = {},
     onGroupsClick: () -> Unit = {},
-    onOpenReels: ((Post) -> Unit)? = null
+    onOpenReels: ((Post) -> Unit)? = null,
+    onOpenMenu: ((Post) -> Unit)? = null,
+    onLikersClick: ((Post) -> Unit)? = null
 ) {
     var storyPreviewProfile by remember { mutableStateOf<UserProfile?>(null) }
 
@@ -104,12 +111,17 @@ fun FeedScreen(
             .fillMaxSize()
             .background(QBackground)
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("feed_list"),
-            contentPadding = PaddingValues(bottom = 90.dp)
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize()
         ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("feed_list"),
+                contentPadding = PaddingValues(bottom = 90.dp)
+            ) {
             // Stories / Highlights Header
             item {
                 Card(
@@ -299,7 +311,9 @@ fun FeedScreen(
                             currentUserId = currentUser?.id,
                             onEditPostClick = onEditPostClick,
                             onDeletePostClick = onDeletePostClick,
-                            onOpenReels = onOpenReels
+                            onOpenReels = onOpenReels,
+                            onOpenMenu = onOpenMenu,
+                            onLikersClick = onLikersClick
                         )
                     }
                 }
@@ -367,4 +381,5 @@ fun FeedScreen(
             )
         }
     }
+}
 }
