@@ -1,4 +1,4 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+
 
 plugins {
   alias(libs.plugins.android.application)
@@ -9,16 +9,17 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 36
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.aistudio.qsocial.qapp"
     minSdk = 24
-    targetSdk = 36
+    targetSdk = 35
     versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toInt() ?: 1
     versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    resourceConfigurations += listOf("en", "bn")
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
@@ -62,9 +63,6 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
-  }
-  androidResources {
-    localeFilters += listOf("en", "bn")
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
   dependenciesInfo {
