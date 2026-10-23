@@ -84,6 +84,18 @@ import com.example.ui.theme.QYellowPrimary
 import com.example.util.PixelArtUtils
 import com.example.util.VideoEmbedUtils
 
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.components.NativeVideoPlayer
+import com.example.ui.viewmodel.ExtractedVideoResult
+import com.example.ui.viewmodel.VideoExtractionState
+import com.example.ui.viewmodel.VideoExtractorViewModel
+
 enum class PostModeTab {
     VIDEO, PHOTO, TEXT, PIXEL_ART, GENERAL
 }
@@ -94,11 +106,28 @@ fun CreatePostBottomSheet(
     currentUser: UserProfile?,
     onDismiss: () -> Unit,
     onPublishGeneral: (type: String, title: String?, content: String, url: String?, onDone: (Boolean, String?) -> Unit) -> Unit,
-    onPublishVideo: (title: String?, videoUrl: String, thumbnailUrl: String?, category: String?, tags: List<String>, onDone: (Boolean, String?) -> Unit) -> Unit,
+    onPublishVideo: (
+        title: String?,
+        videoUrl: String,
+        embedUrl: String?,
+        directUrl: String?,
+        platform: String?,
+        thumbnailUrl: String?,
+        durationSeconds: Int?,
+        width: Int?,
+        height: Int?,
+        isVertical: Boolean?,
+        category: String?,
+        tags: List<String>,
+        onDone: (Boolean, String?) -> Unit
+    ) -> Unit,
     onPublishPhoto: (caption: String?, photoUrls: List<String>, category: String?, tags: List<String>, onDone: (Boolean, String?) -> Unit) -> Unit,
     onPublishText: (caption: String, templateId: String?, category: String?, tags: List<String>, onDone: (Boolean, String?) -> Unit) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val clipboardManager = LocalClipboardManager.current
+    val videoExtractorViewModel: VideoExtractorViewModel = viewModel()
+    val videoExtractionState by videoExtractorViewModel.uiState.collectAsStateWithLifecycle()
 
     var currentTab by remember { mutableStateOf(PostModeTab.VIDEO) }
     var isPublishing by remember { mutableStateOf(false) }
@@ -109,6 +138,28 @@ fun CreatePostBottomSheet(
     var videoUrl by remember { mutableStateOf("") }
     var videoThumbnailUrl by remember { mutableStateOf("") }
     var videoCategory by remember { mutableStateOf("Technology") }
+    var lastExtractedResult by remember { mutableStateOf<ExtractedVideoResult?>(null) }
+
+    // React to extraction results
+    androidx.compose.runtime.LaunchedEffect(videoExtractionState) {
+        when (val state = videoExtractionState) {
+            is VideoExtractionState.Success -> {
+                lastExtractedResult = state.result
+                if (videoTitle.isBlank() && !state.result.title.isNullOrBlank()) {
+                    videoTitle = state.result.title
+                }
+                if (videoThumbnailUrl.isBlank() && !state.result.thumbnailUrl.isNullOrBlank()) {
+                    videoThumbnailUrl = state.result.thumbnailUrl
+                }
+                errorMessage = null
+            }
+            is VideoExtractionState.Error -> {
+                lastExtractedResult = state.fallbackResult
+                errorMessage = state.message
+            }
+            else -> {}
+        }
+    }
 
     // Photo Post Form State
     var photoCaption by remember { mutableStateOf("") }
@@ -175,11 +226,35 @@ fun CreatePostBottomSheet(
                         when (currentTab) {
                             PostModeTab.VIDEO -> {
                                 if (videoUrl.isBlank()) {
-                                    errorMessage = "Please paste a video URL"
+                                    errorMessage = "Please enter or paste a video URL"
                                     isPublishing = false
                                     return@Button
                                 }
-                                onPublishVideo(videoTitle, videoUrl, videoThumbnailUrl, videoCategory, parsedTags) { success, err ->
+                                val extracted = lastExtractedResult
+                                val parsed = VideoEmbedUtils.parseVideoUrl(videoUrl)
+                                val finalEmbed = extracted?.embedUrl ?: parsed.embedUrl
+                                val finalDirect = extracted?.directVideoUrl
+                                val finalPlatform = extracted?.platform ?: parsed.platform
+                                val finalThumb = videoThumbnailUrl.ifBlank { extracted?.thumbnailUrl }
+                                val duration = extracted?.durationSeconds
+                                val width = extracted?.width
+                                val height = extracted?.height
+                                val isVertical = extracted?.isVertical ?: (parsed.platform == "tiktok")
+
+                                onPublishVideo(
+                                    videoTitle.ifBlank { extracted?.title },
+                                    videoUrl.trim(),
+                                    finalEmbed,
+                                    finalDirect,
+                                    finalPlatform,
+                                    finalThumb,
+                                    duration,
+                                    width,
+                                    height,
+                                    isVertical,
+                                    videoCategory,
+                                    parsedTags
+                                ) { success, err ->
                                     isPublishing = false
                                     if (success) onDismiss() else errorMessage = err ?: "Failed to post video"
                                 }
@@ -334,14 +409,61 @@ fun CreatePostBottomSheet(
             when (currentTab) {
                 // 1. VIDEO POST FORM
                 PostModeTab.VIDEO -> {
+                    val isExtracting = videoExtractionState is VideoExtractionState.Extracting
+
                     Column {
+                        // URL Input with Clear & Paste trailing actions
                         OutlinedTextField(
                             value = videoUrl,
-                            onValueChange = { videoUrl = it },
-                            label = { Text("Video URL (YouTube, TikTok, FB, IG)") },
-                            placeholder = { Text("https://www.youtube.com/watch?v=... or TikTok/IG link") },
+                            onValueChange = {
+                                videoUrl = it
+                                // Typing does NOT start playback or auto-extract
+                            },
+                            label = { Text("Video URL (TikTok, YouTube, FB, IG, Direct)") },
+                            placeholder = { Text("Paste link: https://vt.tiktok.com/... or youtube.com") },
                             leadingIcon = {
                                 Icon(Icons.Default.Movie, contentDescription = null, tint = QYellowDark)
+                            },
+                            trailingIcon = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                ) {
+                                    if (videoUrl.isNotBlank()) {
+                                        IconButton(
+                                            onClick = {
+                                                videoUrl = ""
+                                                lastExtractedResult = null
+                                                videoExtractorViewModel.reset()
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Clear,
+                                                contentDescription = "Clear URL",
+                                                tint = QOnSurfaceVariant,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.getText()?.text?.let { clipText ->
+                                                if (clipText.isNotBlank()) {
+                                                    videoUrl = clipText.trim()
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ContentPaste,
+                                            contentDescription = "Paste from Clipboard",
+                                            tint = QYellowDark,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             },
                             singleLine = true,
                             modifier = Modifier
@@ -354,24 +476,131 @@ fun CreatePostBottomSheet(
                             )
                         )
 
-                        // Auto-detection badge & Live Embed Player
-                        if (videoUrl.isNotBlank()) {
-                            val parsed = remember(videoUrl) { VideoEmbedUtils.parseVideoUrl(videoUrl) }
-                            Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Extract Button Row
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(
-                                text = "Auto-detected Platform: ${parsed.platformDisplayName}",
+                                text = "Extracts direct video stream or player",
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = QYellowDark
+                                color = QOnSurfaceVariant,
+                                modifier = Modifier.weight(1f)
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            EmbedVideoPlayer(
-                                videoUrl = videoUrl,
-                                title = videoTitle.takeIf { it.isNotBlank() } ?: "Live Player Preview"
-                            )
+
+                            Button(
+                                onClick = {
+                                    if (videoUrl.isNotBlank()) {
+                                        videoExtractorViewModel.extractVideo(videoUrl)
+                                    }
+                                },
+                                enabled = videoUrl.isNotBlank() && !isExtracting,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow,
+                                    disabledContainerColor = QSurfaceVariant,
+                                    disabledContentColor = QOnSurfaceVariant
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("extract_video_button")
+                            ) {
+                                if (isExtracting) {
+                                    CircularProgressIndicator(
+                                        color = QOnYellow,
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Extracting...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(
+                                        Icons.Default.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Extract", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Extracted Preview Section
+                        val result = lastExtractedResult
+                        if (result != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = QSurfaceVariant),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "${result.platformDisplayName} Stream",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = QYellowDark
+                                        )
+
+                                        if (result.isDirectPlayable && !result.directVideoUrl.isNullOrBlank()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(com.example.ui.theme.QRelayGreen.copy(alpha = 0.2f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (result.platform == "tiktok") "No Watermark HD" else "Direct Video",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = com.example.ui.theme.QRelayGreen
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    result.noticeMessage?.let { notice ->
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = notice,
+                                            fontSize = 11.sp,
+                                            color = QOnSurfaceVariant
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Display player: Native player if direct video URL is ready, else EmbedVideoPlayer
+                                    if (result.isDirectPlayable && !result.directVideoUrl.isNullOrBlank()) {
+                                        NativeVideoPlayer(
+                                            videoUrl = result.directVideoUrl,
+                                            thumbnailUrl = result.thumbnailUrl,
+                                            isVertical = result.isVertical,
+                                            autoPlay = true,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(if (result.isVertical) 340.dp else 220.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                        )
+                                    } else {
+                                        EmbedVideoPlayer(
+                                            videoUrl = result.embedUrl,
+                                            title = videoTitle.takeIf { it.isNotBlank() } ?: result.title ?: "Live Preview"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         OutlinedTextField(
                             value = videoTitle,

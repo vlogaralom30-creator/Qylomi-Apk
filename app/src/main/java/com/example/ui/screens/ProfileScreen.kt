@@ -123,191 +123,125 @@ fun ProfileScreen(
             .testTag("profile_screen"),
         contentPadding = PaddingValues(bottom = 90.dp)
     ) {
-        // Cover Photo & Header Actions
+        // Profile Header (Cover Banner + Overlapping Avatar + Info Card)
         item {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                if (!profile.coverUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = profile.coverUrl,
-                        contentDescription = "Cover Banner",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(QYellowPrimary, QYellowDark, Color(0xFFF59E0B))
-                                )
-                            )
-                    )
-                }
-
-                // Top navigation overlay
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                // 1. Cover Banner Image
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .height(160.dp)
                 ) {
-                    if (!isOwnProfile) {
-                        IconButton(
-                            onClick = onBackClick,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.4f))
-                                .size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White
-                            )
-                        }
+                    if (!profile.coverUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = profile.coverUrl,
+                            contentDescription = "Cover Banner",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     } else {
-                        Spacer(modifier = Modifier.width(38.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(QYellowPrimary, QYellowDark, Color(0xFFF59E0B))
+                                    )
+                                )
+                        )
                     }
 
-                    Row {
-                        IconButton(
-                            onClick = {
-                                try {
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, "Check out ${profile.effectiveDisplayName}'s profile on Qylomi: @${profile.effectiveUsername}")
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
-                                } catch (_: Exception) {}
-                            },
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.4f))
-                                .size(38.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share",
-                                tint = Color.White
-                            )
-                        }
-
-                        if (isOwnProfile) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                    // Top Navigation Action Overlay
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        if (!isOwnProfile) {
                             IconButton(
-                                onClick = onLogoutClick,
+                                onClick = onBackClick,
                                 modifier = Modifier
                                     .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .background(Color.Black.copy(alpha = 0.45f))
                                     .size(38.dp)
-                                    .testTag("profile_logout_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Logout,
-                                    contentDescription = "Logout",
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
                                     tint = Color.White
                                 )
                             }
+                        } else {
+                            Spacer(modifier = Modifier.width(38.dp))
+                        }
+
+                        Row {
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(
+                                                Intent.EXTRA_TEXT,
+                                                "Check out ${profile.effectiveDisplayName}'s profile on Qylomi: @${profile.effectiveUsername}"
+                                            )
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share Profile"))
+                                    } catch (_: Exception) {}
+                                },
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.45f))
+                                    .size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share",
+                                    tint = Color.White
+                                )
+                            }
+
+                            if (isOwnProfile) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = onLogoutClick,
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.45f))
+                                        .size(38.dp)
+                                        .testTag("profile_logout_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Logout,
+                                        contentDescription = "Logout",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        // Profile Identity Header
-        item {
-            Card(
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                colors = CardDefaults.cardColors(containerColor = QSurface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(y = (-20).dp)
-            ) {
-                Column(
+                // 2. Profile Details Surface Card (Layered starting at y = 120.dp)
+                Card(
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = QSurface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(top = 120.dp)
                 ) {
-                    // Avatar & Primary Action Row
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = (-40).dp)
+                            .padding(horizontal = 16.dp)
+                            .padding(top = 52.dp, bottom = 16.dp) // Top padding accounts for avatar height
                     ) {
-                        // Large Avatar with Yellow Border
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(88.dp)
-                                .clip(CircleShape)
-                                .border(3.dp, QYellowPrimary, CircleShape)
-                                .padding(2.dp)
-                        ) {
-                            UserAvatar(
-                                avatarUrl = profile.avatarUrl,
-                                initials = profile.initials,
-                                size = 82.dp
-                            )
-                        }
-
-                        // Action Button (Edit Profile or Follow)
-                        if (isOwnProfile) {
-                            OutlinedButton(
-                                onClick = onEditProfileClick,
-                                shape = RoundedCornerShape(20.dp),
-                                modifier = Modifier
-                                    .padding(bottom = 8.dp)
-                                    .testTag("edit_profile_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = null,
-                                    tint = QYellowDark,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Edit Profile",
-                                    fontWeight = FontWeight.Bold,
-                                    color = QOnSurface
-                                )
-                            }
-                        } else {
-                            if (isFollowing) {
-                                OutlinedButton(
-                                    onClick = { onToggleFollow(profile) },
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                ) {
-                                    Text("Tracking", color = QOnSurfaceVariant)
-                                }
-                            } else {
-                                Button(
-                                    onClick = { onToggleFollow(profile) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = QYellowPrimary,
-                                        contentColor = QOnYellow
-                                    ),
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                ) {
-                                    Text("Track", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-
-                    // Name, Verified, and Rank
-                    Column(modifier = Modifier.offset(y = (-30).dp)) {
+                        // Display Name, Verified Badge, and Username
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = profile.effectiveDisplayName,
@@ -330,17 +264,17 @@ fun ProfileScreen(
                             color = QOnSurfaceVariant
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Social Graph & Stats Bar (from Datasetuse.md: ideas_count, trackers_count, tracking_count)
+                        // Stats Bar
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.SpaceAround,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(QSurfaceVariant)
-                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             StatItem(count = userPosts.size, label = "Ideas")
                             StatItem(count = trackersCount, label = "Trackers")
@@ -348,7 +282,7 @@ fun ProfileScreen(
                             StatItem(count = profile.points ?: 0, label = "XP Points")
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Creator Rank and Points badges
                         Row(
@@ -361,7 +295,7 @@ fun ProfileScreen(
 
                         // Headline
                         if (!profile.headline.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = profile.headline,
                                 fontWeight = FontWeight.SemiBold,
@@ -381,9 +315,9 @@ fun ProfileScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        // Quick info row: Location, Website, Age, Gender
+                        // Quick info row: Location, Work, Education, Website
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -544,6 +478,76 @@ fun ProfileScreen(
                                 profile.badges.forEach { badge ->
                                     BadgePill(badgeName = badge)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Avatar & Action Button Row (Positioned at y = 76.dp)
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 76.dp)
+                ) {
+                    // Profile Avatar with thick border background
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(88.dp)
+                            .clip(CircleShape)
+                            .background(QSurface)
+                            .border(3.5.dp, QYellowPrimary, CircleShape)
+                            .padding(2.5.dp)
+                    ) {
+                        UserAvatar(
+                            avatarUrl = profile.avatarUrl,
+                            initials = profile.initials,
+                            size = 82.dp
+                        )
+                    }
+
+                    // Action Button (Edit Profile or Follow)
+                    if (isOwnProfile) {
+                        OutlinedButton(
+                            onClick = onEditProfileClick,
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier
+                                .testTag("edit_profile_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = QYellowDark,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Edit Profile",
+                                fontWeight = FontWeight.Bold,
+                                color = QOnSurface
+                            )
+                        }
+                    } else {
+                        if (isFollowing) {
+                            OutlinedButton(
+                                onClick = { onToggleFollow(profile) },
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Text("Tracking", color = QOnSurfaceVariant)
+                            }
+                        } else {
+                            Button(
+                                onClick = { onToggleFollow(profile) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow
+                                ),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Text("Track", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

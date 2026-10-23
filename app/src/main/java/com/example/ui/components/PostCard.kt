@@ -24,8 +24,12 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Share
@@ -71,6 +75,10 @@ fun PostCard(
     onCommentClick: () -> Unit,
     onAuthorClick: (UserProfile) -> Unit,
     onBookmarkClick: () -> Unit,
+    currentUserId: String? = null,
+    onEditPostClick: ((Post) -> Unit)? = null,
+    onDeletePostClick: ((Post) -> Unit)? = null,
+    onOpenReels: ((Post) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -81,6 +89,8 @@ fun PostCard(
     )
 
     var isBookmarked by remember { mutableStateOf(post.isBookmarkedByMe) }
+    var showMenu by remember { mutableStateOf(false) }
+    val isOwner = currentUserId != null && currentUserId == post.userId
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -101,17 +111,21 @@ fun PostCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onAuthorClick(author) }
             ) {
                 UserAvatar(
                     avatarUrl = author.avatarUrl,
                     initials = author.initials,
-                    size = 46.dp
+                    size = 46.dp,
+                    modifier = Modifier.clickable { onAuthorClick(author) }
                 )
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onAuthorClick(author) }
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = author.effectiveDisplayName,
@@ -165,6 +179,56 @@ fun PostCard(
                         )
                     }
                 }
+
+                // Owner Actions Menu (Edit & Delete)
+                if (isOwner) {
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
+                                contentDescription = "More Options",
+                                tint = QOnSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Edit Post") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Default.Edit,
+                                        contentDescription = null
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onEditPostClick?.invoke(post)
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Delete Post", color = QLikeRed) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = QLikeRed
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onDeletePostClick?.invoke(post)
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -206,13 +270,60 @@ fun PostCard(
 
                 // 1. Video Post Sub-Table (or Type == "Video")
                 videoInfo != null || post.type.equals("Video", ignoreCase = true) -> {
-                    val urlToPlay = videoInfo?.videoUrl ?: post.externalUrl ?: ""
+                    val directUrl = videoInfo?.directUrl?.takeIf { it.isNotBlank() }
+                    val urlToPlay = directUrl ?: videoInfo?.videoUrl ?: post.externalUrl ?: ""
+
                     if (urlToPlay.isNotBlank()) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        EmbedVideoPlayer(
-                            videoUrl = urlToPlay,
-                            title = videoInfo?.title ?: post.title
-                        )
+
+                        if (directUrl != null) {
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                NativeVideoPlayer(
+                                    videoUrl = directUrl,
+                                    thumbnailUrl = videoInfo.thumbnailUrl,
+                                    isVertical = videoInfo.isVertical ?: false,
+                                    autoPlay = false,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(if (videoInfo.isVertical == true) 360.dp else 220.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                )
+
+                                // Open in Reels badge for vertical or direct video posts
+                                if (onOpenReels != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp)
+                                            .clip(RoundedCornerShape(20.dp))
+                                            .background(Color.Black.copy(alpha = 0.65f))
+                                            .clickable { onOpenReels(post) }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Movie,
+                                                contentDescription = "Open in Reels",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Reels",
+                                                color = Color.White,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            EmbedVideoPlayer(
+                                videoUrl = urlToPlay,
+                                title = videoInfo?.title ?: post.title
+                            )
+                        }
                     }
                 }
 

@@ -1,171 +1,170 @@
-# Multi-Type Post Creation & Embed Player Upgrade Plan
+# Multi-Type Posts, Video URL Extractor, Account Switcher & Qylomi Vector Pixel Art Engine
 
-Upgrade the Qylomi post publishing ecosystem from a single generic post model to a modular, multi-type post system (**Video**, **Photo**, **Text**, and **General Link**) with dedicated relational sub-tables in Supabase (`video_posts`, `photo_posts`, `text_posts`), platform auto-detection (YouTube, TikTok, Facebook, Instagram), live video embed previews, multi-photo galleries, and customizable background color/gradient templates for text posts—all while ensuring **zero data loss** for existing posts.
+Comprehensive architectural blueprint and implementation plan to deliver multi-type posts (sub-tables for Video, Photo, and Text), social video extraction and HTML embed playback (TikTok, Instagram, Facebook, YouTube), local account switching with masked passwords, and the Qylomi Vector Pixel Art rendering and stroke-by-stroke replay engine in native Jetpack Compose.
 
 ---
 
-## User Review & Critical Decisions
+## User Review & Confirmed Decisions
 
 > [!IMPORTANT]
-> The following architectural decisions were confirmed during the interactive planning session:
+> The following key product decisions have been confirmed through Phase 1 user input:
 
-- **Confirmed Decision 1 (Database Schema Strategy)**: Use **separate relational sub-tables** (`video_posts`, `photo_posts`, `text_posts`) linked to the primary `posts` table via `post_id`. This cleanly isolates type-specific attributes while maintaining backward compatibility and zero data loss for existing posts.
-- **Confirmed Decision 2 (Text Post Styling)**: Provide a curated selector of **preset solid background colors and gradient mix templates** (e.g., Sunset Pulse, Neon Cyber, Warm Ember, Deep Emerald) with live text preview.
-- **Confirmed Decision 3 (Video Platform Auto-Detection & Player)**: Implement **automatic URL parsing** when a user pastes links from **YouTube, TikTok, Facebook, or Instagram**, displaying live embedded previews and saving the detected platform string (`youtube`, `tiktok`, `facebook`, `instagram`, `direct_url`) in `video_posts.platform`.
+- **Confirmed Decision 1 (Post Sub-Tables)**: Separate sub-tables (`video_posts`, `photo_posts`, `text_posts`) linked to the primary `posts` table via foreign keys to guarantee 100% zero data loss for legacy posts while storing type-specific metadata.
+- **Confirmed Decision 2 (Video Extraction & Embedding)**: Video links pasted from TikTok, Instagram, Facebook, and YouTube automatically extract metadata/direct streams or convert into web embed URLs rendered inside an embedded HTML/WebView preview player.
+- **Confirmed Decision 3 (Text Post Styling)**: Text-only posts support curated preset background colors and vibrant gradient templates with customizable typography.
+- **Confirmed Decision 4 (Account System)**: Local account credentials saved securely in encrypted local preferences for quick 1-tap multi-account switching with masked (`****`) password security and guest exploration mode.
+- **Confirmed Decision 5 (Qylomi Pixel Art)**: Native Kotlin pixel art module with vector coordinate matrix system ($N \times N$ grid: 16, 24, 32, 48, 64), stroke-order preservation, real-time replay engine (1x, 2x, 4x speeds), Bresenham line interpolation, and multi-frame animation support.
+- **Confirmed Decision 6 (SQL Delivery)**: Clean, executable Supabase PostgreSQL DDL/RLS migration script output in chat for direct execution in Supabase SQL Editor.
 
 ---
 
 ## 1. Overview & Core Concept
 
 ### What It Does
-1. **Multi-Type Creation Tabs in Post Dialog**:
-   - 📹 **Video Post Tab**: Title, optional thumbnail URL, video URL input with auto-detected platform tag (`youtube`, `tiktok`, `facebook`, `instagram`, `direct`), live interactive embed player preview, category selector, and optional `#tags` / keywords.
-   - 📷 **Photo Post Tab**: Main caption, dynamic list of photo image URLs (with a `+ Add Photo` button to attach multiple images), category selector, and `#tags`.
-   - ✍️ **Text Post Tab**: Clean long/short text editor, preset background color picker & curated gradient mix cards (with real-time typography styling), category, and `#tags`.
-   - 📝 **General Post Tab**: Preserves standard legacy post format.
-
-2. **Feeds & Live Embed Player Integration**:
-   - Embedded video renderer that auto-transforms YouTube/TikTok/Facebook/Instagram links into responsive in-feed inline video players.
-   - Horizontal multi-photo carousel slider for photo posts.
-   - Rich styled cards for text posts with gradient backgrounds and contrast-adjusted typography.
-
-3. **Zero-Data-Loss Architecture**:
-   - The primary `posts` table remains the anchor for feed sorting, author details, reactions (`post_reactions`), comments (`comments`), and bookmarks (`saved_posts`).
-   - New posts write to `posts` as well as their respective sub-table (`video_posts`, `photo_posts`, `text_posts`).
-   - Standard fallback getters guarantee existing legacy posts continue rendering seamlessly without errors.
+1. **Multi-Type Post Creation**: A multi-tab creation workflow supporting Video posts (with platform detection, thumbnail, categories, tags), Photo posts (multi-image grid/carousel), Text posts (color/gradient templates), and Qylomi Pixel Art posts.
+2. **Universal Video Extractor & Embed Player**: Auto-detects video URLs (YouTube, TikTok via TikWM/embeds, Facebook Video plugin, Instagram embeds) and extracts direct video streams or generates embed player HTML for real-time live preview.
+3. **Local Multi-Account Manager**: Enables 1-tap switching between multiple saved accounts without re-typing credentials. Shows account emails with masked `****` security and allows guest exploration.
+4. **Qylomi Pixel Art & Replay Engine**: Ultra-lightweight vector coordinate renderer (1–5 KB JSON matrix) capable of drawing with zero finger-gap interpolation, saving stroke sequence, replaying creation stroke-by-stroke in real time, and exporting PNGs/animations.
 
 ---
 
 ## 2. User Experience & Visual Design
 
 ### Key User Flows
+- **Post Creation Flow**:
+  1. Tap FAB (`+`) -> Create Post Dialog opens with 4 tabs: **Video**, **Photo**, **Text**, and **Pixel Art**.
+  2. In **Video tab**: User pastes link -> Auto-detects platform (TikTok, IG, FB, YouTube) -> Fetches thumbnail/embed code -> Live preview player renders -> Add title, category, tags.
+  3. In **Photo tab**: Multi-photo selector -> Caption, category, keywords.
+  4. In **Text tab**: Caption text + Preset color/gradient template palette preview.
+  5. In **Pixel Art tab**: Full drawing grid studio -> Drawing tools (1px-4px brush, eraser, color palette, undo/redo, frame animation timeline) -> Replay mode -> Post to feed.
+- **Feed Rendering Flow**:
+  - Main feed dynamically checks post type and renders either Video Embed Player, Photo Grid/Carousel, Styled Gradient Text Card, or Interactive Qylomi Pixel Art View with a **"Replay Stroke"** button.
 
-1. **Creating a Video Post**:
-   - User opens the Create Post sheet and selects the **Video** tab.
-   - Pastes a video URL (e.g., YouTube link, TikTok video link, Instagram reel).
-   - App automatically detects the platform, displays a platform badge (e.g., `[YouTube]`, `[TikTok]`), and loads a live embed video player preview.
-   - User adds Title, Category, and `#tags`, then taps **Publish**.
-
-2. **Creating a Multi-Photo Post**:
-   - User selects the **Photo** tab.
-   - Types a main caption.
-   - Adds multiple photo URLs using `+ Add Photo` with real-time thumbnail preview cards and quick-remove (`X`) buttons.
-   - Taps **Publish** to post the photo carousel.
-
-3. **Creating a Styled Text Post**:
-   - User selects the **Text** tab.
-   - Enters thoughts or long-form copy.
-   - Selects a background style (e.g., Midnight Violet, Sunset Amber, Dark Obsidian, Neon Lime).
-   - Live card updates previewing the exact card posture before publishing.
-
-### Visual Identity & Theme
-- **Theme**: Premium Material 3 with Qylomi Warm Yellow primary accents (`QYellowPrimary`), obsidian cards (`QSurface`), and high-contrast typography.
-- **Embedded Players**: Clean rounded player containers (`16.dp` corner radius) with video overlays, platform branding badges, and responsive aspect ratios (16:9 for YouTube/FB, 9:16 vertical for TikTok/Instagram Reels).
-- **Text Post Templates**: 6 pre-built gradients with automatic light/dark text contrast matching.
+### Visual Identity & Material 3 Palette
+- **Aesthetic**: Futuristic, sleek social dark/light theme with dynamic Material 3 tokens.
+- **Color Tokens**:
+  - Primary Accent: `#0EA5E9` (Cyan/Sky)
+  - Secondary Accent: `#FF0055` (Neon Pink/TikTok red)
+  - Card Surfaces: Modern elevation cards with subtle gradients (`#F5FAFF` light / `#121216` dark).
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Sub-Tables vs. Single Dynamic Payload Column**:
-  - *Chosen Approach*: Dedicated `video_posts`, `photo_posts`, and `text_posts` tables linked via foreign key `post_id REFERENCES posts(id) ON DELETE CASCADE`.
-  - *Why*: Provides clean schema validation, index performance for media searches, and strict relational integrity without mutating the existing `posts` table structure.
-
-- **Auto-Detection Regex Engine**:
-  - *Chosen Approach*: Client-side regex platform resolver in `VideoEmbedUtils.kt` that extracts video IDs (YouTube v= or shorts/, TikTok video IDs, Instagram p/ reel/ IDs) and formats embed URLs.
-  - *Why*: Provides instantaneous zero-latency live preview inside the creation dialog before network calls.
+1. **Sub-Tables vs Unified Table Modification**:
+   - *Chosen Approach*: Sub-tables `video_posts`, `photo_posts`, and `text_posts` referencing `posts(id)` with ON DELETE CASCADE.
+   - *Why*: Prevents breaking schema changes on the primary `posts` table and ensures existing posts remain unaffected.
+2. **Video URL Parsing via Embed/TikWM**:
+   - *Chosen Approach*: `VideoEmbedUtils.kt` detects YouTube embeds (`youtube.com/embed`), TikTok (`tikwm.com/api` & `tiktok.com/player/v1`), Facebook (`facebook.com/plugins/video.php`), and Instagram (`instagram.com/p/.../embed`).
+   - *Why*: Guarantees reliable video playback inside native Android WebViews across all restricted social platforms without encountering expired direct links.
 
 ---
 
-## 4. Technical Architecture & Data Strategy
-
-### System Architecture & Data Flow
+## 4. Technical Architecture & System Diagram
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Jetpack Compose UI Layer                        │
-│                                                                        │
-│   ┌───────────────────┐    ┌────────────────────┐   ┌──────────────┐   │
-│   │ CreatePostSheet   │    │ VideoEmbedPlayer   │   │ PhotoGallery │   │
-│   │ (4-Tab Creation)  │    │ (YT/TikTok/FB/IG)  │   │  Carousel    │   │
-│   └─────────┬─────────┘    └─────────▲──────────┘   └──────▲───────┘   │
-└─────────────┼────────────────────────┼─────────────────────┼───────────┘
-              │                        │                     │
-              ▼                        │                     │
-┌──────────────────────────────────────┴─────────────────────┴───────────┐
-│                       SocialViewModel & State                          │
-│  - feedPosts: StateFlow<List<Post>>                                    │
-│  - createVideoPost(), createPhotoPost(), createTextPost()              │
-└──────────────────────────────────────┬─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       ANDROID JETPACK COMPOSE APP                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  UI SCREENS & COMPONENTS                                                    │
+│  ├── FeedScreen -> PostCard (Renders Video, Photo, Text, or Pixel Art)      │
+│  ├── CreatePostDialog (Video, Photo, Text, Pixel Art Tabs)                  │
+│  ├── EmbedVideoPlayer (WebView with TikTok/IG/FB/YouTube player HTML)       │
+│  ├── PixelArtCanvas & PixelArtReplayEngine (Qylomi Coordinate Renderer)     │
+│  └── AccountManagerDialog (Multi-Account Switcher with masked passwords)   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  DATA LAYER & REPOSITORIES                                                  │
+│  ├── SocialRepository (Handles posts + video_posts/photo_posts/text_posts)   │
+│  ├── LocalAccountRepository (Encrypted SharedPreferences / DataStore)       │
+│  ├── VideoEmbedUtils (URL Regex Parser & Embed Generator)                   │
+│  └── SupabaseService & Ktor API Client                                      │
+└──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
                                        ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                          SocialRepository                              │
-│  - Joins main posts table with video_posts / photo_posts / text_posts │
-└──────────────────────────────────────┬─────────────────────────────────┘
-                                       │
-                                       ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       Supabase REST Service                            │
-│                                                                        │
-│  ┌──────────────┐     ┌─────────────┐   ┌─────────────┐  ┌───────────┐ │
-│  │    posts     │◄───►│ video_posts │   │ photo_posts │  │text_posts │ │
-│  │ (Main Table) │     │ (sub-table) │   │ (sub-table) │  │(sub-table)│ │
-│  └──────────────┘     └─────────────┘   └─────────────┘  └───────────┘ │
-└────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SUPABASE POSTGRESQL DATABASE                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  TABLES:                                                                    │
+│  ├── posts (id, user_id, type, caption, pixel_art, created_at)              │
+│  ├── video_posts (id, post_id, title, video_url, embed_url, platform, ...)  │
+│  ├── photo_posts (id, post_id, photo_urls, category, tags)                  │
+│  └── text_posts (id, post_id, bg_type, bg_color_hex, gradient_json)         │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Relational Database Schema Definition
+---
 
-#### 1. `video_posts` Sub-Table
+## 5. SQL Migration Script Preview
+
+The following SQL script will be output in the response for direct execution in Supabase SQL Editor:
+
 ```sql
-CREATE TABLE IF NOT EXISTS video_posts (
+-- 1. Video Posts Sub-Table
+CREATE TABLE IF NOT EXISTS public.video_posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-    title TEXT,
+    post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
     thumbnail_url TEXT,
     video_url TEXT NOT NULL,
-    embed_url TEXT,
-    platform TEXT, -- 'youtube', 'tiktok', 'facebook', 'instagram', 'direct'
+    embed_url TEXT NOT NULL,
+    platform TEXT NOT NULL, -- youtube, tiktok, facebook, instagram, direct
     category TEXT,
     tags TEXT[],
+    keywords TEXT[],
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-```
 
-#### 2. `photo_posts` Sub-Table
-```sql
-CREATE TABLE IF NOT EXISTS photo_posts (
+-- 2. Photo Posts Sub-Table
+CREATE TABLE IF NOT EXISTS public.photo_posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-    caption TEXT,
+    post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
     photo_urls TEXT[] NOT NULL,
     category TEXT,
     tags TEXT[],
+    keywords TEXT[],
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-```
 
-#### 3. `text_posts` Sub-Table
-```sql
-CREATE TABLE IF NOT EXISTS text_posts (
+-- 3. Text Posts Sub-Table
+CREATE TABLE IF NOT EXISTS public.text_posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-    caption TEXT NOT NULL,
-    bg_color TEXT, -- e.g. '#1A1A2E' or gradient token ID 'sunset_pulse'
-    font_style TEXT,
-    category TEXT,
-    tags TEXT[],
+    post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+    bg_type TEXT NOT NULL DEFAULT 'solid', -- solid, gradient
+    bg_color_hex TEXT DEFAULT '#0EA5E9',
+    gradient_colors TEXT[] DEFAULT ARRAY['#0EA5E9', '#3B82F6'],
+    font_style TEXT DEFAULT 'default',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Row Level Security (RLS) Policies
+ALTER TABLE public.video_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.text_posts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public Read Video Posts" ON public.video_posts FOR SELECT USING (true);
+CREATE POLICY "Auth Insert Video Posts" ON public.video_posts FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Public Read Photo Posts" ON public.photo_posts FOR SELECT USING (true);
+CREATE POLICY "Auth Insert Photo Posts" ON public.photo_posts FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Public Read Text Posts" ON public.text_posts FOR SELECT USING (true);
+CREATE POLICY "Auth Insert Text Posts" ON public.text_posts FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 ```
 
 ---
 
-## Execution Checklist
+## 6. Implementation Checklist & Verification Strategy
 
-1. **Database Service Layer**: Add Moshi data models for `VideoPost`, `PhotoPost`, `TextPost`, and their respective request DTOs.
-2. **Video Embed Parser**: Implement `VideoEmbedUtils.kt` supporting YouTube embed links, TikTok video embeds, Facebook video players, and Instagram Reels embeds.
-3. **Enhanced Create Post BottomSheet**: Redesign `CreatePostBottomSheet.kt` with a 4-tab selector (**Video**, **Photo**, **Text**, **General**).
-4. **Feed Card Renderers**: Update `PostCard.kt` to dynamically check and render inline video players, photo galleries, or styled text cards based on post type.
-5. **Verification**: Run `compile_applet` to verify zero build errors and pristine compilation state.
+- [ ] **SQL Script Output**: Provide full copy-pasteable SQL migration code in response.
+- [ ] **Data Layer**:
+  - `VideoPost.kt`, `PhotoPost.kt`, `TextPost.kt`, `PixelArtData.kt` models.
+  - `VideoEmbedUtils.kt` with TikTok, Instagram, Facebook, and YouTube URL parsers.
+  - `LocalAccountRepository.kt` for saved account credentials and 1-tap switching with masked passwords.
+  - `SupabaseApi.kt` & `SocialRepository.kt` sub-table API calls.
+- [ ] **UI Layer**:
+  - `EmbedVideoPlayer.kt` AndroidView WebView component.
+  - `PhotoPostGallery.kt` and `StyledTextPostCard.kt`.
+  - `PixelArtCanvas.kt` & `PixelArtStudioDialog.kt` drawing and replay engine.
+  - `CreatePostDialog.kt` updated with 4 post tabs.
+  - `AccountManagerDialog.kt` for account switching and logout.
+- [ ] **Verification**: Execute `compile_applet` to ensure zero compilation errors.

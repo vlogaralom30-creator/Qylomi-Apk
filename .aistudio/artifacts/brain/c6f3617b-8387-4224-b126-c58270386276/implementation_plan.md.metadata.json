@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan for upgrading Qylomi post creation system with multi-type sub-tables (Video, Photo, Text) in Supabase, platform auto-detection & live embed video player, multi-photo attachments, preset background & color mix templates for text posts, and zero-data-loss architecture.",
-  "updatedAt":  "2026-10-22T16:12:28.420669146Z",
+  "summary":  "Implementation plan for Multi-Type Post Sub-Tables (Video, Photo, Text), Universal Video Embed & Extractor Engine (TikTok, IG, FB, YouTube), Local Account Switcher with masked passwords, and Qylomi Vector Pixel Art & Real-Time Replay Engine in Native Android.",
+  "updatedAt":  "2026-10-22T17:17:03.214898658Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

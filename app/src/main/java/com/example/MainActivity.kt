@@ -85,11 +85,20 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
     val searchQuery by viewModel.searchQuery.collectAsState()
     val bannerMessage by viewModel.bannerMessage.collectAsState()
     val savedAccounts by viewModel.savedAccounts.collectAsState()
+    val groups by viewModel.groups.collectAsState()
+    val isGroupsLoading by viewModel.isGroupsLoading.collectAsState()
+    val selectedGroup by viewModel.selectedGroup.collectAsState()
+    val groupPosts by viewModel.groupPosts.collectAsState()
+    val groupMembers by viewModel.groupMembers.collectAsState()
 
     var currentTab by remember { mutableStateOf(SocialTab.FEED) }
     var isEditingProfile by remember { mutableStateOf(false) }
     var isCreatePostOpen by remember { mutableStateOf(false) }
     var selectedUserProfile by remember { mutableStateOf<UserProfile?>(null) }
+    var isGroupsScreenOpen by remember { mutableStateOf(false) }
+    var selectedGroupForPost by remember { mutableStateOf<com.example.data.model.GroupCommunity?>(null) }
+    var isReelsScreenOpen by remember { mutableStateOf(false) }
+    var selectedReelPost by remember { mutableStateOf<com.example.data.model.Post?>(null) }
 
     // Auto-dismiss banner after 3 seconds
     LaunchedEffect(bannerMessage) {
@@ -134,20 +143,26 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
     } else {
         Scaffold(
             topBar = {
-                if (!isEditingProfile && selectedUserProfile == null) {
+                if (!isEditingProfile && selectedUserProfile == null && selectedGroup == null && !isGroupsScreenOpen && !isReelsScreenOpen) {
                     QTopAppBar(
                         currentUser = currentUser,
                         unreadNotifications = 2,
                         onNotificationsClick = { currentTab = SocialTab.NOTIFICATIONS },
+                        onReelsClick = {
+                            selectedReelPost = null
+                            isReelsScreenOpen = true
+                        },
                         onProfileClick = {
                             selectedUserProfile = null
+                            viewModel.selectGroup(null)
+                            isGroupsScreenOpen = false
                             currentTab = SocialTab.PROFILE
                         }
                     )
                 }
             },
             bottomBar = {
-                if (!isEditingProfile && selectedUserProfile == null) {
+                if (!isEditingProfile && selectedUserProfile == null && selectedGroup == null && !isGroupsScreenOpen && !isReelsScreenOpen) {
                     QBottomNavBar(
                         selectedTab = currentTab,
                         onTabSelected = { tab ->
@@ -155,6 +170,8 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                                 isCreatePostOpen = true
                             } else {
                                 selectedUserProfile = null
+                                viewModel.selectGroup(null)
+                                isGroupsScreenOpen = false
                                 currentTab = tab
                             }
                         }
@@ -204,9 +221,48 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                         }
                     }
 
+                    selectedGroup != null -> {
+                        com.example.ui.screens.GroupDetailsScreen(
+                            group = selectedGroup!!,
+                            posts = groupPosts,
+                            members = groupMembers,
+                            allProfiles = allProfiles,
+                            currentUser = currentUser,
+                            onBack = { viewModel.selectGroup(null) },
+                            onToggleJoin = { group -> viewModel.toggleJoinGroup(group) },
+                            onOpenCreatePostForGroup = { group -> selectedGroupForPost = group },
+                            onLikePost = { post -> viewModel.toggleLike(post) },
+                            onCommentPost = { post -> viewModel.openComments(post) },
+                            onBookmarkPost = { post -> viewModel.toggleBookmark(post) },
+                            onAuthorClick = { author ->
+                                selectedUserProfile = author
+                                viewModel.viewUserProfile(author)
+                            },
+                            onEditPost = { post -> /* edit post */ },
+                            onDeletePost = { post -> viewModel.deletePost(post.id) { _, _ -> } }
+                        )
+                    }
+
+                    isGroupsScreenOpen -> {
+                        com.example.ui.screens.GroupsScreen(
+                            groups = groups,
+                            isLoading = isGroupsLoading,
+                            onGroupClick = { group ->
+                                viewModel.selectGroup(group)
+                                isGroupsScreenOpen = false
+                            },
+                            onToggleJoin = { group -> viewModel.toggleJoinGroup(group) },
+                            onCreateGroupClick = {
+                                viewModel.createCommunityGroup("New Community", "A community for creators", "General") { _, _ -> }
+                            }
+                        )
+                    }
+
                     else -> {
                         when (currentTab) {
                             SocialTab.FEED -> {
+                                var editingPost by remember { mutableStateOf<com.example.data.model.Post?>(null) }
+
                                 FeedScreen(
                                     posts = feedPosts,
                                     isLoading = isFeedLoading,
@@ -222,8 +278,30 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                                         viewModel.viewUserProfile(author)
                                     },
                                     onRefresh = { viewModel.loadFeed() },
-                                    onCreatePostClick = { isCreatePostOpen = true }
+                                    onCreatePostClick = { isCreatePostOpen = true },
+                                    onEditPostClick = { post -> editingPost = post },
+                                    onDeletePostClick = { post ->
+                                        viewModel.deletePost(post.id) { _, _ -> }
+                                    },
+                                    onGroupsClick = {
+                                        viewModel.loadGroups()
+                                        isGroupsScreenOpen = true
+                                    },
+                                    onOpenReels = { post ->
+                                        selectedReelPost = post
+                                        isReelsScreenOpen = true
+                                    }
                                 )
+
+                                if (editingPost != null) {
+                                    com.example.ui.components.EditPostBottomSheet(
+                                        post = editingPost!!,
+                                        onDismiss = { editingPost = null },
+                                        onSaveEdit = { newContent, newTitle ->
+                                            viewModel.editPost(editingPost!!.id, newContent, newTitle) { _, _ -> }
+                                        }
+                                    )
+                                }
                             }
 
                             SocialTab.EXPLORE -> {
@@ -304,21 +382,70 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
             }
 
             // Create Post Sheet
-            if (isCreatePostOpen) {
+            if (isCreatePostOpen || selectedGroupForPost != null) {
+                val targetGroup = selectedGroupForPost ?: selectedGroup
                 CreatePostBottomSheet(
                     currentUser = currentUser,
-                    onDismiss = { isCreatePostOpen = false },
-                    onPublishGeneral = { type, title, content, url, onDone ->
-                        viewModel.createPost(type, title, content, url, onDone)
+                    onDismiss = {
+                        isCreatePostOpen = false
+                        selectedGroupForPost = null
                     },
-                    onPublishVideo = { title, videoUrl, thumbnailUrl, category, tags, onDone ->
-                        viewModel.createVideoPost(title, videoUrl, thumbnailUrl, category, tags, onDone)
+                    onPublishGeneral = { type, title, content, url, onDone ->
+                        if (targetGroup != null) {
+                            viewModel.createTextPostInGroup(targetGroup.id, content, "preset_default", targetGroup.category, emptyList(), onDone)
+                        } else {
+                            viewModel.createPost(type, title, content, url, onDone)
+                        }
+                    },
+                    onPublishVideo = { title, videoUrl, embedUrl, directUrl, platform, thumbnailUrl, durationSeconds, width, height, isVertical, category, tags, onDone ->
+                        if (targetGroup != null) {
+                            viewModel.createVideoPostInGroup(
+                                groupId = targetGroup.id,
+                                title = title,
+                                videoUrl = videoUrl,
+                                embedUrl = embedUrl,
+                                directUrl = directUrl,
+                                platform = platform,
+                                thumbnailUrl = thumbnailUrl,
+                                durationSeconds = durationSeconds,
+                                width = width,
+                                height = height,
+                                isVertical = isVertical,
+                                category = category,
+                                tags = tags,
+                                onDone = onDone
+                            )
+                        } else {
+                            viewModel.createVideoPost(
+                                title = title,
+                                videoUrl = videoUrl,
+                                embedUrl = embedUrl,
+                                directUrl = directUrl,
+                                platform = platform,
+                                thumbnailUrl = thumbnailUrl,
+                                durationSeconds = durationSeconds,
+                                width = width,
+                                height = height,
+                                isVertical = isVertical,
+                                category = category,
+                                tags = tags,
+                                onDone = onDone
+                            )
+                        }
                     },
                     onPublishPhoto = { caption, photoUrls, category, tags, onDone ->
-                        viewModel.createPhotoPost(caption, photoUrls, category, tags, onDone)
+                        if (targetGroup != null) {
+                            viewModel.createPhotoPostInGroup(targetGroup.id, caption, photoUrls, category, tags, onDone)
+                        } else {
+                            viewModel.createPhotoPost(caption, photoUrls, category, tags, onDone)
+                        }
                     },
                     onPublishText = { caption, templateId, category, tags, onDone ->
-                        viewModel.createTextPost(caption, templateId, category, tags, onDone)
+                        if (targetGroup != null) {
+                            viewModel.createTextPostInGroup(targetGroup.id, caption, templateId, category, tags, onDone)
+                        } else {
+                            viewModel.createTextPost(caption, templateId, category, tags, onDone)
+                        }
                     }
                 )
             }
@@ -332,6 +459,35 @@ fun QSocialApp(viewModel: SocialViewModel = viewModel()) {
                     currentUser = currentUser,
                     onDismiss = { viewModel.closeComments() },
                     onAddComment = { text -> viewModel.addComment(text) {} }
+                )
+            }
+
+            // Reels Full Screen Overlay
+            if (isReelsScreenOpen) {
+                com.example.ui.screens.ReelsScreen(
+                    initialPost = selectedReelPost,
+                    currentUser = currentUser,
+                    onBack = {
+                        isReelsScreenOpen = false
+                        selectedReelPost = null
+                    },
+                    onAuthorClick = { author ->
+                        isReelsScreenOpen = false
+                        selectedReelPost = null
+                        selectedUserProfile = author
+                        viewModel.viewUserProfile(author)
+                    },
+                    onCommentClick = { post ->
+                        viewModel.openComments(post)
+                    },
+                    onToggleFollow = { author ->
+                        viewModel.toggleFollow(author)
+                    },
+                    isFollowing = { id -> viewModel.isUserFollowed(id) },
+                    onCreateVideoClick = {
+                        isReelsScreenOpen = false
+                        isCreatePostOpen = true
+                    }
                 )
             }
         }

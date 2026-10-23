@@ -405,19 +405,30 @@ class SocialRepository(
     suspend fun createVideoPost(
         title: String?,
         videoUrl: String,
-        thumbnailUrl: String?,
-        category: String?,
-        tags: List<String>
+        embedUrl: String? = null,
+        directUrl: String? = null,
+        platform: String? = null,
+        thumbnailUrl: String? = null,
+        durationSeconds: Int? = null,
+        width: Int? = null,
+        height: Int? = null,
+        isVertical: Boolean? = false,
+        category: String? = null,
+        tags: List<String> = emptyList(),
+        groupId: String? = null
     ): Result<Post> = withContext(Dispatchers.IO) {
         val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
         try {
             val parsedVideo = VideoEmbedUtils.parseVideoUrl(videoUrl)
+            val effectiveEmbedUrl = embedUrl ?: parsedVideo.embedUrl
+            val effectivePlatform = platform ?: parsedVideo.platform
             val mainRequest = CreatePostRequest(
                 userId = user.id,
-                type = "Video",
+                type = "Post", // Safe for posts_type_check constraint
                 title = title?.takeIf { it.isNotBlank() } ?: "Video Post",
                 content = title?.takeIf { it.isNotBlank() } ?: "Shared a video link",
-                externalUrl = videoUrl
+                externalUrl = videoUrl,
+                groupId = groupId
             )
             val res = SupabaseClient.api.createPost(mainRequest)
             if (res.isSuccessful && !res.body().isNullOrEmpty()) {
@@ -427,8 +438,13 @@ class SocialRepository(
                     title = title?.takeIf { it.isNotBlank() },
                     thumbnailUrl = thumbnailUrl?.takeIf { it.isNotBlank() },
                     videoUrl = videoUrl,
-                    embedUrl = parsedVideo.embedUrl,
-                    platform = parsedVideo.platform,
+                    embedUrl = effectiveEmbedUrl,
+                    directUrl = directUrl,
+                    platform = effectivePlatform,
+                    durationSeconds = durationSeconds,
+                    width = width,
+                    height = height,
+                    isVertical = isVertical,
                     category = category,
                     tags = tags
                 )
@@ -439,14 +455,20 @@ class SocialRepository(
 
                 val enriched = createdPost.copy(
                     authorProfile = user,
+                    groupId = groupId,
                     videoPosts = listOf(
                         subTableRecord ?: VideoPost(
                             postId = createdPost.id,
                             title = title,
                             thumbnailUrl = thumbnailUrl,
                             videoUrl = videoUrl,
-                            embedUrl = parsedVideo.embedUrl,
-                            platform = parsedVideo.platform,
+                            embedUrl = effectiveEmbedUrl,
+                            directUrl = directUrl,
+                            platform = effectivePlatform,
+                            durationSeconds = durationSeconds,
+                            width = width,
+                            height = height,
+                            isVertical = isVertical,
                             category = category,
                             tags = tags
                         )
@@ -465,7 +487,8 @@ class SocialRepository(
         caption: String?,
         photoUrls: List<String>,
         category: String?,
-        tags: List<String>
+        tags: List<String>,
+        groupId: String? = null
     ): Result<Post> = withContext(Dispatchers.IO) {
         val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
         if (photoUrls.isEmpty()) return@withContext Result.failure(Exception("Please add at least 1 photo URL"))
@@ -475,7 +498,8 @@ class SocialRepository(
                 type = "Photo",
                 title = "Photo Gallery",
                 content = caption?.takeIf { it.isNotBlank() } ?: "Shared photo gallery",
-                externalUrl = photoUrls.firstOrNull()
+                externalUrl = photoUrls.firstOrNull(),
+                groupId = groupId
             )
             val res = SupabaseClient.api.createPost(mainRequest)
             if (res.isSuccessful && !res.body().isNullOrEmpty()) {
@@ -494,6 +518,7 @@ class SocialRepository(
 
                 val enriched = createdPost.copy(
                     authorProfile = user,
+                    groupId = groupId,
                     photoPosts = listOf(
                         subTableRecord ?: PhotoPost(
                             postId = createdPost.id,
@@ -517,7 +542,8 @@ class SocialRepository(
         caption: String,
         templateId: String?,
         category: String?,
-        tags: List<String>
+        tags: List<String>,
+        groupId: String? = null
     ): Result<Post> = withContext(Dispatchers.IO) {
         val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
         if (caption.isBlank()) return@withContext Result.failure(Exception("Content cannot be empty"))
@@ -526,7 +552,8 @@ class SocialRepository(
                 userId = user.id,
                 type = "Text",
                 title = "Thought",
-                content = caption
+                content = caption,
+                groupId = groupId
             )
             val res = SupabaseClient.api.createPost(mainRequest)
             if (res.isSuccessful && !res.body().isNullOrEmpty()) {
@@ -785,4 +812,195 @@ class SocialRepository(
             Result.success(emptyList())
         }
     }
+
+    // 8. Edit & Delete Post
+    suspend fun updatePost(postId: String, newContent: String, newTitle: String? = null): Result<Post> = withContext(Dispatchers.IO) {
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val req = com.example.data.model.UpdatePostRequest(title = newTitle, content = newContent)
+            val res = SupabaseClient.api.updatePost("eq.$postId", req, userToken = token)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                Result.success(res.body()!!.first())
+            } else {
+                Result.failure(Exception("Failed to edit post"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePost(postId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val res = SupabaseClient.api.deletePost("eq.$postId", userToken = token)
+            if (res.isSuccessful) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("Failed to delete post"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // 9. Communities / Groups
+    suspend fun getGroups(): Result<List<com.example.data.model.GroupCommunity>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getGroups()
+            if (res.isSuccessful && res.body() != null) {
+                val userId = _currentUser.value?.id
+                val groups = res.body()!!
+                if (!userId.isNullOrBlank()) {
+                    val enriched = groups.map { group ->
+                        val memberRes = SupabaseClient.api.getGroupMembers("eq.${group.id}")
+                        val isJoined = memberRes.body()?.any { it.userId == userId } == true
+                        group.copy(isJoinedByMe = isJoined)
+                    }
+                    Result.success(enriched)
+                } else {
+                    Result.success(groups)
+                }
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createGroup(name: String, description: String, category: String = "general"): Result<com.example.data.model.GroupCommunity> = withContext(Dispatchers.IO) {
+        val user = _currentUser.value ?: return@withContext Result.failure(Exception("Must be logged in to create a group"))
+        try {
+            val slug = name.lowercase().replace(" ", "-").replace("[^a-z0-9-]".toRegex(), "") + "-" + UUID.randomUUID().toString().take(4)
+            val req = com.example.data.model.CreateGroupRequest(
+                name = name,
+                slug = slug,
+                description = description,
+                category = category,
+                creatorId = user.id
+            )
+            val token = SupabaseClient.getAuthToken()?.let { "Bearer $it" }
+            val res = SupabaseClient.api.createGroup(req, userToken = token)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                val newGroup = res.body()!!.first()
+                // Auto join creator as admin
+                try {
+                    SupabaseClient.api.joinGroup(com.example.data.model.JoinGroupRequest(groupId = newGroup.id, userId = user.id, role = "admin"))
+                } catch (_: Exception) {}
+                Result.success(newGroup.copy(isJoinedByMe = true))
+            } else {
+                Result.failure(Exception("Failed to create community group"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun joinGroup(groupId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val userId = _currentUser.value?.id ?: return@withContext Result.failure(Exception("Must be logged in to join group"))
+        try {
+            val req = com.example.data.model.JoinGroupRequest(groupId = groupId, userId = userId)
+            val res = SupabaseClient.api.joinGroup(req)
+            if (res.isSuccessful) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("Failed to join group"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun leaveGroup(groupId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        val userId = _currentUser.value?.id ?: return@withContext Result.failure(Exception("Must be logged in"))
+        try {
+            val res = SupabaseClient.api.leaveGroup("eq.$groupId", "eq.$userId")
+            if (res.isSuccessful) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("Failed to leave group"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getPostsByGroup(groupId: String): Result<List<Post>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getPostsByGroup("eq.$groupId")
+            if (res.isSuccessful && res.body() != null) {
+                val posts = res.body()!!.map { post ->
+                    post.copy(
+                        isLikedByMe = likedPostIds.contains(post.id),
+                        isBookmarkedByMe = savedPostIds.contains(post.id)
+                    )
+                }
+                Result.success(posts)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.success(emptyList())
+        }
+    }
+
+    suspend fun getGroupMembers(groupId: String): Result<List<com.example.data.model.GroupMember>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getGroupMembers("eq.$groupId")
+            if (res.isSuccessful && res.body() != null) {
+                Result.success(res.body()!!)
+            } else {
+                Result.success(emptyList())
+            }
+        } catch (e: Exception) {
+            Result.success(emptyList())
+        }
+    }
+
+    suspend fun getReels(limit: Int = 20, offset: Int = 0): Result<List<Post>> = withContext(Dispatchers.IO) {
+        try {
+            val res = SupabaseClient.api.getReels(limit = limit, offset = offset)
+            if (res.isSuccessful && !res.body().isNullOrEmpty()) {
+                val reels = res.body()!!.mapNotNull { vp ->
+                    val parent = vp.parentPost
+                    if (parent != null) {
+                        parent.copy(
+                            videoPosts = listOf(vp),
+                            isLikedByMe = likedPostIds.contains(parent.id),
+                            isBookmarkedByMe = savedPostIds.contains(parent.id)
+                        )
+                    } else if (!vp.videoUrl.isNullOrBlank()) {
+                        Post(
+                            id = vp.postId,
+                            userId = "",
+                            type = "Video",
+                            title = vp.title,
+                            content = vp.title ?: "Video Reel",
+                            externalUrl = vp.videoUrl,
+                            videoPosts = listOf(vp)
+                        )
+                    } else null
+                }
+                if (reels.isNotEmpty()) {
+                    return@withContext Result.success(reels)
+                }
+            }
+
+            // Fallback: return any video posts from feed
+            val feedRes = getFeedPosts()
+            val videoPosts = feedRes.getOrDefault(emptyList()).filter {
+                it.videoDetails != null || it.type.equals("Video", ignoreCase = true) ||
+                        (it.externalUrl != null && (it.externalUrl.contains("tiktok", true) || it.externalUrl.contains("youtube", true) || it.externalUrl.contains("youtu.be", true)))
+            }
+            Result.success(videoPosts)
+        } catch (e: Exception) {
+            // Graceful fallback
+            val feedRes = getFeedPosts()
+            val videoPosts = feedRes.getOrDefault(emptyList()).filter {
+                it.videoDetails != null || it.type.equals("Video", ignoreCase = true)
+            }
+            Result.success(videoPosts)
+        }
+    }
 }
+

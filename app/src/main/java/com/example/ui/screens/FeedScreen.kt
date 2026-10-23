@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,7 +81,11 @@ fun FeedScreen(
     onBookmarkClick: (Post) -> Unit,
     onAuthorClick: (UserProfile) -> Unit,
     onRefresh: () -> Unit,
-    onCreatePostClick: () -> Unit
+    onCreatePostClick: () -> Unit,
+    onEditPostClick: (Post) -> Unit = {},
+    onDeletePostClick: (Post) -> Unit = {},
+    onGroupsClick: () -> Unit = {},
+    onOpenReels: ((Post) -> Unit)? = null
 ) {
     var storyPreviewProfile by remember { mutableStateOf<UserProfile?>(null) }
 
@@ -143,7 +148,7 @@ fun FeedScreen(
                 }
             }
 
-            // Categories Filter Bar
+            // Categories & Groups Filter Bar
             item {
                 Row(
                     modifier = Modifier
@@ -151,8 +156,37 @@ fun FeedScreen(
                         .background(QBackground)
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 14.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Groups / Communities Chip Button
+                    FilterChip(
+                        selected = false,
+                        onClick = onGroupsClick,
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.Groups,
+                                    contentDescription = "Communities",
+                                    tint = QYellowDark,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Groups", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = QYellowLight,
+                            labelColor = QYellowDark
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = false,
+                            borderColor = QYellowDark.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(18.dp)
+                    )
+
                     categories.forEach { cat ->
                         val isSelected = selectedCategory == cat
                         FilterChip(
@@ -261,7 +295,11 @@ fun FeedScreen(
                             onLikeClick = { onLikeClick(post) },
                             onCommentClick = { onCommentClick(post) },
                             onBookmarkClick = { onBookmarkClick(post) },
-                            onAuthorClick = onAuthorClick
+                            onAuthorClick = onAuthorClick,
+                            currentUserId = currentUser?.id,
+                            onEditPostClick = onEditPostClick,
+                            onDeletePostClick = onDeletePostClick,
+                            onOpenReels = onOpenReels
                         )
                     }
                 }

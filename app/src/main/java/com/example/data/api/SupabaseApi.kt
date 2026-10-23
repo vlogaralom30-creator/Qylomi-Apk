@@ -86,6 +86,12 @@ interface SupabaseApi {
         @Query("limit") limit: Int = 40
     ): Response<List<Post>>
 
+    @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)&order=created_at.desc")
+    suspend fun getPostsByGroup(
+        @Query("group_id") groupIdFilter: String,
+        @Query("limit") limit: Int = 40
+    ): Response<List<Post>>
+
     @POST("rest/v1/posts")
     suspend fun createPost(
         @Body post: CreatePostRequest,
@@ -98,6 +104,19 @@ interface SupabaseApi {
         @Body request: CreateVideoPostRequest,
         @Header("Prefer") prefer: String = "return=representation",
         @Header("Authorization") userToken: String? = null
+    ): Response<List<VideoPost>>
+
+    @GET("rest/v1/video_posts?select=*,posts!inner(id,user_id,title,content,appreciations_count,replies_count,relays_count,group_id,created_at,profiles:user_id(*))&or=(direct_url.not.is.null,platform.eq.tiktok)&order=created_at.desc")
+    suspend fun getReels(
+        @Query("limit") limit: Int = 10,
+        @Query("offset") offset: Int = 0
+    ): Response<List<VideoPost>>
+
+    @PATCH("rest/v1/video_posts")
+    suspend fun updateVideoPostDirectUrl(
+        @Query("id") idFilter: String,
+        @Body updates: Map<String, String>,
+        @Header("Prefer") prefer: String = "return=representation"
     ): Response<List<VideoPost>>
 
     @POST("rest/v1/photo_posts")
@@ -194,4 +213,54 @@ interface SupabaseApi {
         @Query("recipient_id") recipientIdFilter: String,
         @Query("limit") limit: Int = 30
     ): Response<List<NotificationItem>>
+
+    // 8. Post Edit & Delete
+    @PATCH("rest/v1/posts")
+    suspend fun updatePost(
+        @Query("id") idFilter: String,
+        @Body updates: com.example.data.model.UpdatePostRequest,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Post>>
+
+    @DELETE("rest/v1/posts")
+    suspend fun deletePost(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 9. Table: groups & group_members (Communities)
+    @GET("rest/v1/groups?select=*&order=members_count.desc")
+    suspend fun getGroups(
+        @Query("limit") limit: Int = 30
+    ): Response<List<com.example.data.model.GroupCommunity>>
+
+    @GET("rest/v1/groups?select=*")
+    suspend fun getGroupById(
+        @Query("id") idFilter: String
+    ): Response<List<com.example.data.model.GroupCommunity>>
+
+    @POST("rest/v1/groups")
+    suspend fun createGroup(
+        @Body group: com.example.data.model.CreateGroupRequest,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<com.example.data.model.GroupCommunity>>
+
+    @GET("rest/v1/group_members?select=*")
+    suspend fun getGroupMembers(
+        @Query("group_id") groupIdFilter: String
+    ): Response<List<com.example.data.model.GroupMember>>
+
+    @POST("rest/v1/group_members")
+    suspend fun joinGroup(
+        @Body request: com.example.data.model.JoinGroupRequest,
+        @Header("Prefer") prefer: String = "return=representation"
+    ): Response<List<com.example.data.model.GroupMember>>
+
+    @DELETE("rest/v1/group_members")
+    suspend fun leaveGroup(
+        @Query("group_id") groupIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<Unit>
 }

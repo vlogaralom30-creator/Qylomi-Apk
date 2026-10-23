@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Explore
@@ -60,6 +61,7 @@ fun QTopAppBar(
     unreadNotifications: Int = 0,
     onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onReelsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -103,6 +105,24 @@ fun QTopAppBar(
 
         // Right Action Items
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Reels button
+            if (onReelsClick != null) {
+                IconButton(
+                    onClick = onReelsClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("top_reels_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Movie,
+                        contentDescription = "Reels",
+                        tint = QYellowDark,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(2.dp))
+            }
+
             // Notifications button with badge
             IconButton(
                 onClick = onNotificationsClick,

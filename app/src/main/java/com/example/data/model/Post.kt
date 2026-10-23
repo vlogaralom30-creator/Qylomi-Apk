@@ -45,10 +45,16 @@ data class VideoPost(
     @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
     @Json(name = "video_url") val videoUrl: String = "",
     @Json(name = "embed_url") val embedUrl: String? = null,
+    @Json(name = "direct_url") val directUrl: String? = null,
     @Json(name = "platform") val platform: String? = "direct",
+    @Json(name = "duration_seconds") val durationSeconds: Int? = null,
+    @Json(name = "width") val width: Int? = null,
+    @Json(name = "height") val height: Int? = null,
+    @Json(name = "is_vertical") val isVertical: Boolean? = false,
     @Json(name = "category") val category: String? = null,
     @Json(name = "tags") val tags: List<String>? = emptyList(),
-    @Json(name = "created_at") val createdAt: String? = null
+    @Json(name = "created_at") val createdAt: String? = null,
+    @Json(name = "posts") val parentPost: Post? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -58,7 +64,12 @@ data class CreateVideoPostRequest(
     @Json(name = "thumbnail_url") val thumbnailUrl: String? = null,
     @Json(name = "video_url") val videoUrl: String,
     @Json(name = "embed_url") val embedUrl: String? = null,
+    @Json(name = "direct_url") val directUrl: String? = null,
     @Json(name = "platform") val platform: String? = "direct",
+    @Json(name = "duration_seconds") val durationSeconds: Int? = null,
+    @Json(name = "width") val width: Int? = null,
+    @Json(name = "height") val height: Int? = null,
+    @Json(name = "is_vertical") val isVertical: Boolean? = false,
     @Json(name = "category") val category: String? = null,
     @Json(name = "tags") val tags: List<String>? = emptyList()
 )
