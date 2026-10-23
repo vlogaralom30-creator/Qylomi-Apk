@@ -95,53 +95,75 @@ jobs:
 
 
       - name: Prepare Artifacts
+        if: always()
         run: |
           mkdir -p dist/mapping
-          find app/build/outputs/apk -type f -name "*.apk" -exec cp {} dist/ \;
-          find app/build/outputs/mapping/release -name "mapping.txt" -exec cp {} dist/mapping/ \; || true
+          # Locate and copy all APKs to dist/
+          echo "Searching for APKs..."
+          find app/build/outputs/apk -type f -name "*.apk" -print -exec cp {} dist/ \;
+          
+          # Copy ProGuard mapping if available
+          if [ -d "app/build/outputs/mapping/release" ]; then
+            cp app/build/outputs/mapping/release/mapping.txt dist/mapping/ || true
+          fi
+          
+          echo "Contents of dist directory:"
+          ls -R dist
 
       - name: Upload Release APK
+        if: success() && env.KEYSTORE_MISSING != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Qylomi-v1.0.${{ github.run_number }}-release
+          name: Qylomi-v1.0.${{ github.run_number }}-Release-APK
           path: dist/*-release.apk
           retention-days: 30
+          if-no-files-found: error
 
       - name: Upload Debug APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Qylomi-v1.0.${{ github.run_number }}-debug
+          name: Qylomi-v1.0.${{ github.run_number }}-Debug-APK
           path: dist/*-debug.apk
           retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload ProGuard Mapping
-        if: env.KEYSTORE_MISSING != 'true'
+        if: success() && env.KEYSTORE_MISSING != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Qylomi-v1.0.${{ github.run_number }}-mapping
+          name: Qylomi-v1.0.${{ github.run_number }}-ProGuard-Mapping
           path: dist/mapping/mapping.txt
           retention-days: 30
+          if-no-files-found: warn
 
       - name: Generate Workflow Summary
+        if: always()
         run: |
           echo "### 🚀 Qylomi Build v1.0.${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          
           if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
             echo "| **Build Type** | ⚠️ Debug (Unsigned) |" >> $GITHUB_STEP_SUMMARY
             echo "| **Status** | Missing KEYSTORE_BASE64 secret |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| **Build Type** | ✅ Release (Stably Signed) |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Release Size** | \`${{ env.APK_SIZE }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Release Size** | \`${{ env.APK_SIZE || 'N/A' }}\` |" >> $GITHUB_STEP_SUMMARY
           fi
+          
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
           if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
-            echo "> **Note**: Signing is currently disabled because the release secrets are not yet set up. Please follow the instructions in the previous AI message to generate and add your keystore secrets." >> $GITHUB_STEP_SUMMARY
+            echo "> **Note**: Signing is currently disabled because the release secrets are not yet set up. Please follow the instructions in the final report to generate and add your keystore secrets." >> $GITHUB_STEP_SUMMARY
           fi
+          
+          echo "#### Artifacts Summary:" >> $GITHUB_STEP_SUMMARY
+          ls -lh dist/*.apk 2>/dev/null | awk '{print "- " $9 " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY || echo "No APKs found." >> $GITHUB_STEP_SUMMARY
+          
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Download APKs from the **Artifacts** section at the top of this page." >> $GITHUB_STEP_SUMMARY
 

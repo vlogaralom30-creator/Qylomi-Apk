@@ -46,3 +46,8 @@
 
 # Kotlin standard library
 -keep class kotlin.Metadata { *; }
+
+# Keep all activities
+-keep public class * extends android.app.Activity
+-keep class com.example.MainActivity { *; }
+-keep class com.example.** { *; }
