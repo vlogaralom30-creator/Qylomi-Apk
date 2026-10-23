@@ -1,53 +1,21 @@
-# Moshi models and generated adapters
--keep class com.example.data.model.** { *; }
--keep @com.squareup.moshi.JsonClass class *
--keep class * extends com.squareup.moshi.JsonAdapter
+# Add project specific ProGuard rules here.
+# You can control the set of applied configuration files using the
+# proguardFiles setting in build.gradle.
+#
+# For more details, see
+#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Retrofit interfaces and generic signatures
--keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod
--keep class retrofit2.** { *; }
--keep interface retrofit2.** { *; }
--dontwarn retrofit2.**
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
 
-# OkHttp / Okio
--keep class okhttp3.** { *; }
--keep interface okhttp3.** { *; }
--dontwarn okhttp3.**
--dontwarn okio.**
+# Uncomment this to preserve the line number information for
+# debugging stack traces.
+#-keepattributes SourceFile,LineNumberTable
 
-# Kotlin Coroutines (suspend functions)
--keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
--keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
--keepclassmembernames class kotlinx.coroutines.android.HandlerContext {
-    volatile <fields>;
-}
-
-# Webview / JavaScript Interface (YouTube Bridge)
--keepclassmembers class * {
-    @android.webkit.JavascriptInterface <methods>;
-}
-
-# Media3 / ExoPlayer
--keep class androidx.media3.** { *; }
--dontwarn androidx.media3.**
-
-# Coil
--keep class coil.** { *; }
--dontwarn coil.**
-
-# Enums (used in JSON)
--keepclassmembers enum * {
-    public static **[] values();
-    public static ** valueOf(java.lang.String);
-}
-
-# Line numbers for stack traces
--keepattributes SourceFile, LineNumberTable
-
-# Kotlin standard library
--keep class kotlin.Metadata { *; }
-
-# Keep all activities
--keep public class * extends android.app.Activity
--keep class com.example.MainActivity { *; }
--keep class com.example.** { *; }
+# If you keep the line number information, uncomment this to
+# hide the original source file name.
+#-renamesourcefileattribute SourceFile
