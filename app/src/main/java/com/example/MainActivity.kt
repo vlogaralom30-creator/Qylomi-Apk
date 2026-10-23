@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.Post
 import com.example.data.model.UserProfile
@@ -56,17 +57,43 @@ import com.example.ui.viewmodel.PostActionsViewModel
 import com.example.ui.viewmodel.SearchViewModel
 import com.example.ui.viewmodel.SocialViewModel
 import kotlinx.coroutines.delay
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.example.ui.components.BrandedSplash
+import androidx.compose.runtime.saveable.rememberSaveable
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        
+        // Remove system splash immediately to let Compose splash take over
+        splashScreen.setOnExitAnimationListener { it.remove() }
+        
         enableEdgeToEdge()
         setContent {
+            var showSplash by rememberSaveable { mutableStateOf(true) }
+            val socialViewModel: SocialViewModel = viewModel()
+            val isReady by socialViewModel.isReady.collectAsState()
+
             MyApplicationTheme {
-                QSocialApp()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    QSocialApp(viewModel = socialViewModel)
+                    
+                    if (showSplash) {
+                        BrandedSplash(
+                            isReady = isReady,
+                            onSplashFinished = {
+                                showSplash = false
+                            }
+                        )
+                    }
+                }
             }
         }
     }
+
+
 }
 
 @Composable
@@ -74,7 +101,7 @@ fun QSocialApp(
     viewModel: SocialViewModel = viewModel(),
     postActionsViewModel: PostActionsViewModel = viewModel(),
     commentsViewModel: CommentsViewModel = viewModel(),
-    searchViewModel: SearchViewModel = viewModel()
+    searchViewModel: SearchViewModel = viewModel(factory = ViewModelProvider.AndroidViewModelFactory.getInstance(androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application))
 ) {
     val context = LocalContext.current
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
@@ -348,7 +375,6 @@ fun QSocialApp(
 
                             SocialTab.NOTIFICATIONS -> {
                                 NotificationsScreen(
-                                    notifications = notifications,
                                     onRefresh = { viewModel.loadNotifications() }
                                 )
                             }

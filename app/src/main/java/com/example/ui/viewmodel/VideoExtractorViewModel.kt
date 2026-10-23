@@ -33,7 +33,9 @@ data class ExtractedVideoResult(
     val noticeMessage: String? = null,
     val videoId: String? = null,
     val isShort: Boolean = false,
-    val startSeconds: Int = 0
+    val startSeconds: Int = 0,
+    val fileSize: Long? = null,
+    val mimeType: String? = null
 ) {
     fun toExtractedVideo(): ExtractedVideo {
         return ExtractedVideo(
@@ -130,10 +132,16 @@ class VideoExtractorViewModel : ViewModel() {
                     noticeMessage = extracted.noticeMessage,
                     videoId = extracted.videoId,
                     isShort = extracted.isShort,
-                    startSeconds = extracted.startSeconds
+                    startSeconds = extracted.startSeconds,
+                    fileSize = extracted.fileSize,
+                    mimeType = extracted.mimeType
                 )
                 _uiState.value = VideoExtractionState.Success(result)
             } catch (e: Exception) {
+                val rawMsg = e.localizedMessage ?: "Failed to extract video details"
+                val displayMsg = rawMsg.substringAfter("|")
+                val errorCode = if (rawMsg.contains("|")) rawMsg.substringBefore("|") else null
+                
                 val detected = VideoEmbedUtils.parseVideoUrl(url)
                 val fallback = ExtractedVideoResult(
                     platform = detected.platform,
@@ -142,10 +150,10 @@ class VideoExtractorViewModel : ViewModel() {
                     embedUrl = detected.embedUrl,
                     isDirectPlayable = false,
                     isFallbackEmbed = true,
-                    noticeMessage = "Could not extract video details. Using web embed fallback."
+                    noticeMessage = displayMsg
                 )
                 _uiState.value = VideoExtractionState.Error(
-                    message = e.localizedMessage ?: "Failed to extract video details",
+                    message = displayMsg,
                     fallbackResult = fallback
                 )
             }

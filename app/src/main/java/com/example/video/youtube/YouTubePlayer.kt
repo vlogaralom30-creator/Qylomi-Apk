@@ -1,5 +1,7 @@
 package com.example.video.youtube
 
+import android.util.Log
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -101,26 +103,31 @@ private class YtBridge(
 
     @JavascriptInterface
     fun onReady() {
+        Log.d("YT_FEED", "bridge onReady")
         mainHandler.post { onReadyCallback() }
     }
 
     @JavascriptInterface
     fun onStateChange(state: Int) {
+        Log.d("YT_FEED", "bridge onStateChange: $state")
         mainHandler.post { onStateChangeCallback(state) }
     }
 
     @JavascriptInterface
     fun onError(code: Int) {
+        Log.d("YT_FEED", "bridge onError: $code")
         mainHandler.post { onErrorCallback(code) }
     }
 
     @JavascriptInterface
     fun onProgress(curr: Float, dur: Float) {
+        // Log.d("YT_FEED", "bridge onProgress: $curr / $dur") // too spammy
         mainHandler.post { onProgressCallback(curr, dur) }
     }
 
     @JavascriptInterface
     fun onAutoplayBlocked() {
+        Log.d("YT_FEED", "bridge onAutoplayBlocked")
         mainHandler.post { onAutoplayBlockedCallback() }
     }
 }
@@ -389,6 +396,7 @@ private fun createConfiguredWebView(
     onHideCustomView: () -> Unit
 ): WebView {
     val webView = WebView(context)
+    Log.d("YT_FEED", "WebView created")
     activeController.attachWebView(webView)
 
     webView.layoutParams = ViewGroup.LayoutParams(
@@ -431,9 +439,24 @@ private fun createConfiguredWebView(
         override fun onHideCustomView() {
             onHideCustomView()
         }
+
+        override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+            Log.d("YT_FEED", "console: ${consoleMessage?.message()}")
+            return super.onConsoleMessage(consoleMessage)
+        }
     }
 
     webView.webViewClient = object : WebViewClient() {
+        override fun onPageFinished(view: WebView?, url: String?) {
+            Log.d("YT_FEED", "onPageFinished: $url")
+            super.onPageFinished(view, url)
+        }
+
+        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {
+            Log.d("YT_FEED", "onReceivedError: ${error?.description}")
+            super.onReceivedError(view, request, error)
+        }
+
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val targetUrl = request?.url?.toString() ?: return false
             val host = request.url.host?.lowercase() ?: ""

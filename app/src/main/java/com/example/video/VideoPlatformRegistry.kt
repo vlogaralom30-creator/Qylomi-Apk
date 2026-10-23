@@ -20,6 +20,7 @@ object VideoPlatformRegistry {
 
     private val handlers: List<VideoPlatformHandler> = listOf(
         YouTubeHandler(),
+        com.example.video.gdrive.GoogleDriveHandler(),
         TikTokLegacyHandler(),
         InstagramLegacyHandler(),
         FacebookLegacyHandler(),

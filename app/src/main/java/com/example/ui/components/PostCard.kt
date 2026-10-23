@@ -148,12 +148,7 @@ fun PostCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Verified Creator",
-                            tint = QVerifiedBlue,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        ProfileBadge(author)
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -341,7 +336,24 @@ fun PostCard(
                             isVertical = isShortOrVertical,
                             isShort = parsed?.isShort == true,
                             durationSec = videoInfo?.durationSeconds,
-                            isNativePlayable = !videoInfo?.directUrl.isNullOrBlank()
+                            isNativePlayable = !videoInfo?.directUrl.isNullOrBlank(),
+                            requestHeaders = if (handler.platformId == "gdrive") {
+                                val fileId = effectiveId?.substringBefore("|") ?: ""
+                                val resourceKey = effectiveId?.substringAfter("|", "").takeIf { it?.isNotBlank() == true }
+                                val headers = mutableMapOf<String, String>()
+                                if (resourceKey != null) {
+                                    headers["X-Goog-Drive-Resource-Keys"] = "$fileId/$resourceKey"
+                                }
+                                try {
+                                    val fieldSha = com.example.BuildConfig::class.java.getField("GOOGLE_DRIVE_SHA1")
+                                    val cert = fieldSha.get(null) as? String
+                                    if (cert != null) {
+                                        headers["X-Android-Package"] = com.example.BuildConfig.APPLICATION_ID
+                                        headers["X-Android-Cert"] = cert.uppercase().replace(":", "")
+                                    }
+                                } catch (_: Exception) {}
+                                headers.takeIf { it.isNotEmpty() }
+                            } else null
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -388,7 +400,10 @@ fun PostCard(
                                         .aspectRatio(if (isShortOrVertical) 9f / 14f else 16f / 9f)
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(Color.Black)
-                                        .clickable { isPlayerActive = true }
+                                        .clickable {
+                                            android.util.Log.d("YT_FEED", "Tap received: ${extractedVideo.originalUrl}")
+                                            isPlayerActive = true
+                                        }
                                 ) {
                                     if (!thumb.isNullOrBlank()) {
                                         AsyncImage(
@@ -628,21 +643,14 @@ fun PostCard(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable {
-                            // Quick share trigger
-                            try {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "${post.title?.let { "$it: " } ?: ""}${post.content}\n- Via Qylomi")
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "Share post"))
-                            } catch (_: Exception) {}
+                            // TODO: Open Relay BottomSheet
                         }
                         .padding(horizontal = 6.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Repeat,
                         contentDescription = "Relay",
-                        tint = QRelayGreen,
+                        tint = if (post.isRelayedByMe == true) QRelayGreen else QOnSurfaceVariant,
                         modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(5.dp))
@@ -650,7 +658,7 @@ fun PostCard(
                         text = "${post.relaysCount}",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = QOnSurfaceVariant
+                        color = if (post.isRelayedByMe == true) QRelayGreen else QOnSurfaceVariant
                     )
                 }
 

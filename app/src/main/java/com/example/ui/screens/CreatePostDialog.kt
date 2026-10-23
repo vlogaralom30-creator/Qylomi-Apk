@@ -587,18 +587,36 @@ fun CreatePostBottomSheet(
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(QYellowLight)
+                                                .background(if (result.platform == "gdrive") com.example.ui.theme.QRelayGreen.copy(alpha = 0.2f) else QYellowLight)
                                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                                         ) {
                                             Text(
                                                 text = result.platformDisplayName.uppercase(),
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = QYellowDark
+                                                color = if (result.platform == "gdrive") com.example.ui.theme.QRelayGreen else QYellowDark
                                             )
                                         }
 
-                                        if (result.isDirectPlayable && !result.directVideoUrl.isNullOrBlank()) {
+                                        if (result.platform == "gdrive") {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                result.fileSize?.let { size ->
+                                                    Text(
+                                                        text = formatFileSize(size),
+                                                        fontSize = 11.sp,
+                                                        color = QOnSurfaceVariant
+                                                    )
+                                                    Text(" • ", color = QOnSurfaceVariant, fontSize = 11.sp)
+                                                }
+                                                result.durationSeconds?.let { dur ->
+                                                    Text(
+                                                        text = formatDuration(dur),
+                                                        fontSize = 11.sp,
+                                                        color = QOnSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        } else if (result.isDirectPlayable && !result.directVideoUrl.isNullOrBlank()) {
                                             Box(
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(6.dp))
@@ -622,6 +640,20 @@ fun CreatePostBottomSheet(
                                             fontSize = 11.sp,
                                             color = QOnSurfaceVariant
                                         )
+                                        
+                                        if (notice.contains("NOT_PUBLIC") || notice.contains("Set sharing")) {
+                                            var showHowToShare by remember { mutableStateOf(false) }
+                                            Text(
+                                                text = "How to make public?",
+                                                color = QYellowPrimary,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.clickable { showHowToShare = true }.padding(top = 4.dp)
+                                            )
+                                            if (showHowToShare) {
+                                                HowToShareDriveBottomSheet { showHowToShare = false }
+                                            }
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -1014,5 +1046,71 @@ fun CreatePostBottomSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HowToShareDriveBottomSheet(onDismiss: () -> Unit) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = QSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .navigationBarsPadding()
+        ) {
+            Text(
+                "How to make a Drive video public",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = QOnSurface
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            val steps = listOf(
+                "1. Open the file in Google Drive (Web or App).",
+                "2. Click 'Share' and change 'Restricted' to 'Anyone with the link'.",
+                "3. Make sure the role is set to 'Viewer'. Click 'Done'."
+            )
+            
+            steps.forEach { step ->
+                Text(
+                    text = step,
+                    fontSize = 14.sp,
+                    color = QOnSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow)
+            ) {
+                Text("Got it")
+            }
+        }
+    }
+}
+
+fun formatFileSize(size: Long): String {
+    if (size <= 0) return "0 B"
+    val units = listOf("B", "KB", "MB", "GB", "TB")
+    val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
+    return String.format(java.util.Locale.US, "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+}
+
+fun formatDuration(seconds: Int): String {
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+    return if (h > 0) {
+        String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s)
+    } else {
+        String.format(java.util.Locale.US, "%d:%02d", m, s)
     }
 }

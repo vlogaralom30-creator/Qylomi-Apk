@@ -56,6 +56,10 @@ object VideoEmbedUtils {
                 }
                 "https://www.facebook.com/plugins/video.php?href=$encoded&show_text=0"
             }
+            "gdrive" -> {
+                val fileId = parsed?.videoId?.substringBefore("|")
+                if (fileId != null) "https://drive.google.com/file/d/$fileId/preview" else trimmed
+            }
             else -> trimmed
         }
 

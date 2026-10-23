@@ -170,15 +170,19 @@ object MediaParser {
             )
         }
 
-        // Google Drive check
-        GOOGLE_DRIVE_REGEX.find(trimmed)?.let { match ->
-            val fileId = match.groupValues[1]
-            return ParsedMedia(
-                type = MediaType.GOOGLE_DRIVE,
-                url = trimmed,
-                id = fileId,
-                embedUrl = "https://drive.google.com/file/d/$fileId/preview"
-            )
+        // Google Drive check (via registry)
+        val handler = com.example.video.VideoPlatformRegistry.resolve(trimmed)
+        if (handler.platformId == "gdrive") {
+            val p = handler.parse(trimmed)
+            val fileId = p?.videoId?.substringBefore("|")
+            if (fileId != null) {
+                return ParsedMedia(
+                    type = MediaType.GOOGLE_DRIVE,
+                    url = trimmed,
+                    id = p.videoId,
+                    embedUrl = "https://drive.google.com/file/d/$fileId/preview"
+                )
+            }
         }
 
         // Direct Image

@@ -31,7 +31,10 @@ data class ExtractedVideo(
     val durationSec: Int? = null,
     val startSeconds: Int = 0,
     val isNativePlayable: Boolean = false,
-    val noticeMessage: String? = null
+    val noticeMessage: String? = null,
+    val requestHeaders: Map<String, String>? = null,
+    val fileSize: Long? = null,
+    val mimeType: String? = null
 )
 
 /**
@@ -41,7 +44,8 @@ data class PlayerConfig(
     val autoPlay: Boolean = false,
     val muted: Boolean = false,
     val loop: Boolean = false,
-    val showControls: Boolean = true
+    val showControls: Boolean = true,
+    val nativeOnly: Boolean = false
 )
 
 /**

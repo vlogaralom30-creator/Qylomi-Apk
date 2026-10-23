@@ -81,14 +81,19 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     private val _bannerMessage = MutableStateFlow<String?>(null)
     val bannerMessage: StateFlow<String?> = _bannerMessage.asStateFlow()
 
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.restoreSession()
             loadFeed()
             loadProfiles()
             loadSavedPosts()
+            _isReady.value = true
         }
     }
+
 
     fun clearBanner() {
         _bannerMessage.value = null

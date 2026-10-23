@@ -49,6 +49,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
+import com.example.ui.components.ProfileBadge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -350,12 +351,7 @@ fun ProfileScreen(
                                 color = QOnSurface
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Verified",
-                                tint = QVerifiedBlue,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            ProfileBadge(profile, modifier = Modifier.size(18.dp))
                         }
 
                         Text(

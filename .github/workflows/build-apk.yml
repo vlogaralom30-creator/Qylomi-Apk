@@ -1,4 +1,5 @@
 name: Build Qylomi APK
+run-name: Build Qylomi v1.0.${{ github.run_number }}
 
 on:
   push:
@@ -7,15 +8,11 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
     inputs:
-      build_type:
-        description: 'Select build type'
-        required: true
-        default: 'debug'
-        type: choice
-        options:
-          - debug
-          - release_unsigned
-          - both
+      build_debug:
+        description: 'Also build debug APK'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,77 +32,95 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+          cache: 'gradle'
 
-      - name: Set up Gradle 9.3.1
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
 
-      - name: Prepare Environment and Secrets
+      - name: Prepare Environment
         run: |
-          echo "Setting up environment configuration..."
           if [ ! -f ".env" ] && [ -f ".env.example" ]; then
             cp .env.example .env
-            echo "Copied .env.example to .env"
           elif [ ! -f ".env" ]; then
             touch .env
-            echo "Created empty .env"
           fi
 
-      - name: Prepare Keystore
+      - name: Decode Keystore
+        id: decode_keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "Configuring signing keystore..."
-          if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            echo "Successfully decoded debug.keystore from base64"
-          elif [ ! -f "debug.keystore" ]; then
-            keytool -genkey -v -keystore debug.keystore -alias androiddebugkey \
-              -storepass android -keypass android -keyalg RSA -keysize 2048 \
-              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            echo "Generated fallback debug.keystore"
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            if [ "${{ github.event_name }}" == "pull_request" ]; then
+              echo "KEYSTORE_MISSING=true" >> $GITHUB_ENV
+              echo "Skipping release build as KEYSTORE_BASE64 is missing (PR from fork?)."
+            else
+              echo "Error: KEYSTORE_BASE64 secret is missing!"
+              exit 1
+            fi
           else
-            echo "debug.keystore is already present"
+            echo "$KEYSTORE_BASE64" | base64 -d > $RUNNER_TEMP/upload.jks
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> $GITHUB_ENV
           fi
 
-      - name: Build Debug APK
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
+      - name: Build Release APK
+        if: env.KEYSTORE_MISSING != 'true'
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "Building Debug APK with Gradle..."
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          
+      - name: Build Debug APK (Optional)
+        if: ${{ github.event.inputs.build_debug == 'true' || github.event_name == 'pull_request' || env.KEYSTORE_MISSING == 'true' }}
+        run: |
           gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Build Release (Unsigned) APK
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'release_unsigned' || github.event.inputs.build_type == 'both') }}
+      - name: Verify Release APK
+        if: env.KEYSTORE_MISSING != 'true'
         run: |
-          echo "Building Release APK with Gradle..."
-          gradle :app:assembleRelease --no-daemon --stacktrace || true
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk")
+          echo "APK_SIZE=$(ls -lh $APK_PATH | awk '{print $5}')" >> $GITHUB_ENV
+          apksigner verify --print-certs "$APK_PATH" | grep "SHA-256"
 
       - name: Prepare Artifacts
         run: |
-          mkdir -p dist
+          mkdir -p dist/mapping
           find app/build/outputs/apk -type f -name "*.apk" -exec cp {} dist/ \;
-          echo "Listing generated APK files in dist/:"
-          ls -la dist/
+          find app/build/outputs/mapping/release -name "mapping.txt" -exec cp {} dist/mapping/ \; || true
 
-      - name: Upload Debug APK Artifact
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Qylomi-Android-APK
-          path: dist/*.apk
+          name: Qylomi-v1.0.${{ github.run_number }}-release
+          path: dist/*-release.apk
+          retention-days: 30
+
+      - name: Upload Debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qylomi-v1.0.${{ github.run_number }}-debug
+          path: dist/*-debug.apk
+          retention-days: 7
+
+      - name: Upload ProGuard Mapping
+        if: env.KEYSTORE_MISSING != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qylomi-v1.0.${{ github.run_number }}-mapping
+          path: dist/mapping/mapping.txt
           retention-days: 30
 
       - name: Generate Workflow Summary
         run: |
-          echo "### 🚀 Qylomi Android Build Succeeded!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Qylomi Build v1.0.${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| **App Name** | Qylomi |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Release Size** | \`${{ env.APK_SIZE }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### Generated APK Files:" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          ls -lh dist/ >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the APK from the **Artifacts** section at the top of this run summary." >> $GITHUB_STEP_SUMMARY
+          echo "Download APKs from the **Artifacts** section." >> $GITHUB_STEP_SUMMARY

@@ -83,7 +83,8 @@ fun NativeVideoPlayer(
     resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
     showControls: Boolean = true,
     onReady: () -> Unit = {},
-    onError: (String) -> Unit = {}
+    onError: (String) -> Unit = {},
+    requestHeaders: Map<String, String>? = null
 ) {
     val playUrl = if (videoUrl.isNotBlank()) videoUrl else url
     val context = LocalContext.current
@@ -100,7 +101,7 @@ fun NativeVideoPlayer(
     val defaultRatio = aspectRatio ?: if (isVertical) (9f / 14f) else (16f / 9f)
     var detectedAspectRatio by remember(playUrl) { mutableFloatStateOf(defaultRatio) }
 
-    val exoPlayer = remember(context, retryTrigger) {
+    val exoPlayer = remember(context, retryTrigger, requestHeaders) {
         val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
             .setUsage(androidx.media3.common.C.USAGE_MEDIA)
             .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -122,7 +123,7 @@ fun NativeVideoPlayer(
         }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(
-            VideoPlayerCache.buildCacheDataSourceFactory(context)
+            VideoPlayerCache.buildCacheDataSourceFactory(context, requestHeaders)
         )
         ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)

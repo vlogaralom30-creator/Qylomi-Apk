@@ -459,4 +459,32 @@ class SupabaseService(
             }
         }
     }
+
+    suspend fun sendNotificationRpc(payload: Map<String, Any?>): Result<Unit> {
+        return try {
+            val token = client.getAuthToken()?.let { "Bearer $it" }
+            val response = client.api.sendNotificationRpc(payload, userToken = token)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to send notification"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun markNotificationAsRead(notificationId: String): Result<Unit> {
+        return try {
+            val token = client.getAuthToken()?.let { "Bearer $it" }
+            val response = client.api.markNotificationAsRead("eq.$notificationId", userToken = token)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("Failed to mark as read"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

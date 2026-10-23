@@ -29,7 +29,8 @@ data class Post(
     @Json(name = "pinned_at") val pinnedAt: String? = null,
     // Client-side interactions tracked from database
     val isLikedByMe: Boolean = false,
-    val isBookmarkedByMe: Boolean = false
+    val isBookmarkedByMe: Boolean = false,
+    val isRelayedByMe: Boolean? = false
 ) {
     val videoDetails: VideoPost? get() = videoPosts?.firstOrNull()
     val photoDetails: PhotoPost? get() = photoPosts?.firstOrNull()

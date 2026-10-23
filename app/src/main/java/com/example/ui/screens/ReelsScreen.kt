@@ -77,6 +77,7 @@ import com.example.data.model.Post
 import com.example.data.model.UserProfile
 import com.example.ui.components.EmbedVideoPlayer
 import com.example.ui.components.NativeVideoPlayer
+import com.example.ui.components.ProfileBadge
 import com.example.ui.components.UserAvatar
 import com.example.ui.theme.QLikeRed
 import com.example.ui.theme.QOnYellow
@@ -323,20 +324,38 @@ fun ReelPageItem(
             }
     ) {
         // Main Video Stage
-        if (directUrl != null) {
-            NativeVideoPlayer(
-                videoUrl = directUrl,
-                thumbnailUrl = videoDetails?.thumbnailUrl,
+        val handler = remember(videoUrl) { com.example.video.VideoPlatformRegistry.resolve(videoUrl) }
+        val extractedVideo = remember(reel, videoUrl) {
+            com.example.video.ExtractedVideo(
+                platform = handler.platformId,
+                videoId = reel.videoDetails?.externalId ?: handler.parse(videoUrl)?.videoId,
+                originalUrl = videoUrl,
+                embedUrl = reel.videoDetails?.embedUrl ?: videoUrl,
+                directUrl = directUrl,
+                thumbnailUrl = reel.videoDetails?.thumbnailUrl,
+                title = reel.videoDetails?.title ?: reel.title,
                 isVertical = true,
-                autoPlay = isCurrentPage && !isUserPaused,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else if (videoUrl.isNotBlank()) {
-            EmbedVideoPlayer(
-                videoUrl = videoUrl,
-                title = videoDetails?.title ?: reel.title
+                isNativePlayable = directUrl != null,
+                requestHeaders = if (handler.platformId == "gdrive") {
+                    // We need to rebuild headers here if it's Drive and not yet extracted
+                    // But usually Reels are extracted or have directUrl
+                    null 
+                } else null
             )
         }
+
+        handler.Player(
+            video = extractedVideo,
+            modifier = Modifier.fillMaxSize(),
+            config = com.example.video.PlayerConfig(
+                autoPlay = isCurrentPage && !isUserPaused,
+                muted = isMuted,
+                loop = true,
+                showControls = false,
+                nativeOnly = handler.platformId == "gdrive"
+            ),
+            controller = null
+        )
 
         // Bottom Gradient Scrim for readable text
         Box(
@@ -522,12 +541,7 @@ fun ReelPageItem(
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Verified",
-                            tint = QVerifiedBlue,
-                            modifier = Modifier.size(13.dp)
-                        )
+                        ProfileBadge(author, modifier = Modifier.size(13.dp))
                     }
 
                     Text(

@@ -126,22 +126,32 @@ class ReelsViewModel(
 
         val sourceUrl = details?.videoUrl ?: post.externalUrl ?: return
         val parsed = VideoEmbedUtils.parseVideoUrl(sourceUrl)
-        if (parsed.platform == "tiktok") {
+        if (parsed.platform == "tiktok" || parsed.platform == "gdrive") {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val direct = VideoExtractorViewModel().reExtractDirectUrl(sourceUrl)
-                    if (direct != null) {
-                        updatePostDirectUrlInMemory(post.id, direct)
+                    val handler = com.example.video.VideoPlatformRegistry.resolve(sourceUrl)
+                    val p = handler.parse(sourceUrl) ?: com.example.video.ParsedVideo(handler.platformId, sourceUrl)
+                    val res = handler.extract(p).getOrNull()
+                    
+                    if (res != null) {
+                        updatePostMetadataInMemory(post.id, res)
                     }
                 } catch (_: Exception) {}
             }
         }
     }
 
-    private suspend fun updatePostDirectUrlInMemory(postId: String, directUrl: String) = withContext(Dispatchers.Main) {
+    private suspend fun updatePostMetadataInMemory(postId: String, extracted: com.example.video.ExtractedVideo) = withContext(Dispatchers.Main) {
         _reels.value = _reels.value.map { p ->
             if (p.id == postId) {
-                val updatedVp = p.videoDetails?.copy(directUrl = directUrl, isVertical = true)
+                val details = p.videoDetails
+                val updatedVp = details?.copy(
+                    directUrl = extracted.directUrl ?: details.directUrl,
+                    isVertical = extracted.isVertical,
+                    thumbnailUrl = extracted.thumbnailUrl ?: details.thumbnailUrl,
+                    title = extracted.title ?: details.title,
+                    durationSeconds = extracted.durationSec ?: details.durationSeconds
+                )
                 p.copy(videoPosts = if (updatedVp != null) listOf(updatedVp) else p.videoPosts)
             } else p
         }

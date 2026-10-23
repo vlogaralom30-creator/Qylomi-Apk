@@ -45,10 +45,14 @@ object VideoPlayerCache {
         }
     }
 
-    fun buildCacheDataSourceFactory(context: Context): DataSource.Factory {
+    fun buildCacheDataSourceFactory(context: Context, headers: Map<String, String>? = null): DataSource.Factory {
         val cache = getCache(context)
         val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent(USER_AGENT)
+        
+        if (!headers.isNullOrEmpty()) {
+            httpDataSourceFactory.setDefaultRequestProperties(headers)
+        }
 
         return CacheDataSource.Factory()
             .setCache(cache)

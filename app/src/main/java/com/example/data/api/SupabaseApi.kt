@@ -106,7 +106,7 @@ interface SupabaseApi {
         @Header("Authorization") userToken: String? = null
     ): Response<List<VideoPost>>
 
-    @GET("rest/v1/video_posts?select=*,posts!inner(id,user_id,title,content,appreciations_count,replies_count,relays_count,group_id,created_at,profiles:user_id(*))&or=(direct_url.not.is.null,platform.eq.tiktok)&order=created_at.desc")
+    @GET("rest/v1/video_posts?select=*,posts!inner(id,user_id,title,content,appreciations_count,replies_count,relays_count,group_id,created_at,profiles:user_id(*))&or=(direct_url.not.is.null,platform.eq.tiktok,platform.eq.gdrive)&order=created_at.desc")
     suspend fun getReels(
         @Query("limit") limit: Int = 10,
         @Query("offset") offset: Int = 0
@@ -243,6 +243,13 @@ interface SupabaseApi {
         @Header("Authorization") userToken: String? = null
     ): Response<Unit>
 
+    @PATCH("rest/v1/notifications")
+    suspend fun markNotificationAsRead(
+        @Query("id") idFilter: String,
+        @Body updates: Map<String, Boolean> = mapOf("read" to true),
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<NotificationItem>>
+
     // 5. Table: saved_posts (Private bookmarks)
     @GET("rest/v1/saved_posts?select=*,posts(*,profiles:user_id(*))&order=created_at.desc")
     suspend fun getSavedPosts(
@@ -376,4 +383,27 @@ interface SupabaseApi {
         @Query("limit") limit: Int = 20,
         @Query("offset") offset: Int = 0
     ): Response<List<com.example.data.model.PostTagEmbed>>
+    // 11. Table: post_relays
+    @GET("rest/v1/post_relays?select=post_id")
+    suspend fun getRelaysByUser(
+        @Query("user_id") userIdFilter: String
+    ): Response<List<com.example.data.model.PostRelay>>
+
+    @GET("rest/v1/post_relays?select=*")
+    suspend fun getRelay(
+        @Query("post_id") postIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<List<com.example.data.model.PostRelay>>
+
+    @POST("rest/v1/post_relays")
+    suspend fun insertRelay(
+        @Body relay: Map<String, Any?>,
+        @Header("Prefer") prefer: String = "return=representation"
+    ): Response<Unit>
+
+    @DELETE("rest/v1/post_relays")
+    suspend fun deleteRelay(
+        @Query("post_id") postIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<Unit>
 }

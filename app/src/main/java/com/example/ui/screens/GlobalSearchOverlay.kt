@@ -80,6 +80,8 @@ fun GlobalSearchOverlay(
     Surface(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .imePadding()
             .testTag("global_search_overlay"),
         color = QBackground
     ) {
@@ -90,10 +92,10 @@ fun GlobalSearchOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(QSurface)
-                    .statusBarsPadding()
                     .border(width = 0.5.dp, color = QCardBorder)
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
+                // ... (rest of search bar)
                 IconButton(
                     onClick = {
                         viewModel.closeSearchOverlay()
@@ -180,7 +182,7 @@ fun GlobalSearchOverlay(
                     },
                     divider = { HorizontalDivider(color = QCardBorder, thickness = 0.5.dp) }
                 ) {
-                    SearchTab.values().forEach { tab ->
+                    SearchTab.entries.forEach { tab ->
                         Tab(
                             selected = selectedTab == tab,
                             onClick = { viewModel.selectTab(tab) },
@@ -203,67 +205,67 @@ fun GlobalSearchOverlay(
                 }
             }
 
-            // Content Area
-            val cleanQuery = searchQuery.trim()
-            if (cleanQuery.length < 2) {
-                // Empty state: Recent searches & Trending Tags
-                EmptyQueryView(
-                    recentSearches = recentSearches,
-                    trendingTags = trendingTags,
-                    onRecentClick = { query ->
-                        viewModel.onQueryChanged(query)
-                        viewModel.executeSearch()
-                    },
-                    onRemoveRecent = { viewModel.removeRecentSearch(it) },
-                    onClearAllRecent = { viewModel.clearAllRecentSearches() },
-                    onTagClick = { tag ->
-                        onTagClick(tag)
+            // Content Area (Use weight(1f) here)
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                val cleanQuery = searchQuery.trim()
+                if (cleanQuery.length < 2) {
+                    // Empty state: Recent searches & Trending Tags
+                    EmptyQueryView(
+                        recentSearches = recentSearches,
+                        trendingTags = trendingTags,
+                        onRecentClick = { query ->
+                            viewModel.onQueryChanged(query)
+                            viewModel.executeSearch()
+                        },
+                        onRemoveRecent = { viewModel.removeRecentSearch(it) },
+                        onClearAllRecent = { viewModel.clearAllRecentSearches() },
+                        onTagClick = { tag ->
+                            onTagClick(tag)
+                        }
+                    )
+                } else {
+                    // Search Results based on selected Tab
+                    when (selectedTab) {
+                        SearchTab.ALL -> AllResultsView(
+                            query = cleanQuery,
+                            postsState = postsState,
+                            usersState = usersState,
+                            tagsState = tagsState,
+                            currentUser = currentUser,
+                            onSeeAllPosts = { viewModel.selectTab(SearchTab.POSTS) },
+                            onSeeAllPeople = { viewModel.selectTab(SearchTab.PEOPLE) },
+                            onSeeAllTags = { viewModel.selectTab(SearchTab.TAGS) },
+                            onPostClick = onPostClick,
+                            onUserClick = onUserClick,
+                            onTagClick = onTagClick,
+                            onLikeClick = onLikeClick,
+                            onCommentClick = onCommentClick,
+                            onShareClick = onShareClick,
+                            onOptionClick = onOptionClick
+                        )
+                        // ... (other cases)
+                        SearchTab.POSTS -> PostsResultsView(
+                            query = cleanQuery,
+                            postsState = postsState,
+                            currentUser = currentUser,
+                            onPostClick = onPostClick,
+                            onUserClick = onUserClick,
+                            onLikeClick = onLikeClick,
+                            onCommentClick = onCommentClick,
+                            onShareClick = onShareClick,
+                            onOptionClick = onOptionClick
+                        )
+                        SearchTab.PEOPLE -> PeopleResultsView(
+                            query = cleanQuery,
+                            usersState = usersState,
+                            onUserClick = onUserClick
+                        )
+                        SearchTab.TAGS -> TagsResultsView(
+                            query = cleanQuery,
+                            tagsState = tagsState,
+                            onTagClick = onTagClick
+                        )
                     }
-                )
-            } else {
-                // Search Results based on selected Tab
-                when (selectedTab) {
-                    SearchTab.ALL -> AllResultsView(
-                        query = cleanQuery,
-                        postsState = postsState,
-                        usersState = usersState,
-                        tagsState = tagsState,
-                        currentUser = currentUser,
-                        onSeeAllPosts = { viewModel.selectTab(SearchTab.POSTS) },
-                        onSeeAllPeople = { viewModel.selectTab(SearchTab.PEOPLE) },
-                        onSeeAllTags = { viewModel.selectTab(SearchTab.TAGS) },
-                        onPostClick = onPostClick,
-                        onUserClick = onUserClick,
-                        onTagClick = onTagClick,
-                        onLikeClick = onLikeClick,
-                        onCommentClick = onCommentClick,
-                        onShareClick = onShareClick,
-                        onOptionClick = onOptionClick
-                    )
-
-                    SearchTab.POSTS -> PostsResultsView(
-                        query = cleanQuery,
-                        postsState = postsState,
-                        currentUser = currentUser,
-                        onPostClick = onPostClick,
-                        onUserClick = onUserClick,
-                        onLikeClick = onLikeClick,
-                        onCommentClick = onCommentClick,
-                        onShareClick = onShareClick,
-                        onOptionClick = onOptionClick
-                    )
-
-                    SearchTab.PEOPLE -> PeopleResultsView(
-                        query = cleanQuery,
-                        usersState = usersState,
-                        onUserClick = onUserClick
-                    )
-
-                    SearchTab.TAGS -> TagsResultsView(
-                        query = cleanQuery,
-                        tagsState = tagsState,
-                        onTagClick = onTagClick
-                    )
                 }
             }
         }
