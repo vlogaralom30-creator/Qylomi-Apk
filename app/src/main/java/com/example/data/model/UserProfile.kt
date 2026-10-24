@@ -25,9 +25,19 @@ data class UserProfile(
     @Json(name = "creator_level") val creatorLevel: Int? = 1,
     @Json(name = "badges") val badges: List<String>? = emptyList(),
     @Json(name = "points_history") val pointsHistory: List<PointsHistoryItem>? = emptyList(),
+    @Json(name = "role") val role: String = "user",
     @Json(name = "created_at") val createdAt: String? = null,
     @Json(name = "updated_at") val updatedAt: String? = null
 ) {
+    val isCreator: Boolean
+        get() = role.equals("creator", ignoreCase = true) || role.equals("admin", ignoreCase = true)
+
+    val isAdmin: Boolean
+        get() = role.equals("admin", ignoreCase = true)
+
+    val canCreateSeries: Boolean
+        get() = isCreator || isAdmin
+
     val effectiveDisplayName: String
         get() = displayName?.takeIf { it.isNotBlank() }
             ?: username?.takeIf { it.isNotBlank() }

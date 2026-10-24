@@ -172,6 +172,7 @@ fun ReelsScreen(
             LaunchedEffect(pagerState) {
                 snapshotFlow { pagerState.settledPage }.collect { settledPage ->
                     viewModel.setSettledIndex(settledPage)
+                    viewModel.updatePrefetchWindow(settledPage, context)
                 }
             }
 

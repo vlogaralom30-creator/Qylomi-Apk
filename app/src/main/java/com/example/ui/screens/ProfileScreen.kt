@@ -35,7 +35,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -202,7 +204,9 @@ fun ProfileScreen(
     onToggleFollow: (UserProfile) -> Unit,
     isFollowing: Boolean,
     onOpenMenu: ((Post) -> Unit)? = null,
-    onLikersClick: ((Post) -> Unit)? = null
+    onLikersClick: ((Post) -> Unit)? = null,
+    onOpenCreatorStudio: (() -> Unit)? = null,
+    onOpenAdminStudio: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -607,24 +611,54 @@ fun ProfileScreen(
 
                     // Action Button (Edit Profile or Follow)
                     if (isOwnProfile) {
-                        OutlinedButton(
-                            onClick = onEditProfileClick,
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier
-                                .testTag("edit_profile_button")
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = null,
-                                tint = QYellowDark,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Edit Profile",
-                                fontWeight = FontWeight.Bold,
-                                color = QOnSurface
-                            )
+                            OutlinedButton(
+                                onClick = onEditProfileClick,
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier.testTag("edit_profile_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = QYellowDark,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Edit",
+                                    fontWeight = FontWeight.Bold,
+                                    color = QOnSurface
+                                )
+                            }
+
+                            if (profile.canCreateSeries || currentUser?.canCreateSeries == true) {
+                                Button(
+                                    onClick = { onOpenCreatorStudio?.invoke() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = QYellowDark, contentColor = Color.Black),
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.testTag("creator_studio_button")
+                                ) {
+                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Studio", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            if (profile.isAdmin || currentUser?.isAdmin == true) {
+                                Button(
+                                    onClick = { onOpenAdminStudio?.invoke() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F), contentColor = Color.White),
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.testTag("admin_studio_button")
+                                ) {
+                                    Icon(imageVector = Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Admin", fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     } else {
                         if (isFollowing) {

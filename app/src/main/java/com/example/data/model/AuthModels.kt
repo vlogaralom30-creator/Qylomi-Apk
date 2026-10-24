@@ -23,6 +23,30 @@ data class AuthResponse(
     @Json(name = "expires_in") val expiresIn: Long? = null,
     @Json(name = "refresh_token") val refreshToken: String? = null,
     @Json(name = "user") val user: SupabaseUser? = null
+) {
+    fun toSession(): Session? {
+        val token = accessToken ?: return null
+        val uid = user?.id ?: ""
+        val mail = user?.email ?: ""
+        val refresh = refreshToken ?: ""
+        val expiresAt = (System.currentTimeMillis() / 1000) + (expiresIn ?: 3600L)
+        return Session(
+            userId = uid,
+            email = mail,
+            accessToken = token,
+            refreshToken = refresh,
+            expiresAtEpochSec = expiresAt
+        )
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class Session(
+    @Json(name = "user_id") val userId: String = "",
+    @Json(name = "email") val email: String = "",
+    @Json(name = "access_token") val accessToken: String = "",
+    @Json(name = "refresh_token") val refreshToken: String = "",
+    @Json(name = "expires_at") val expiresAtEpochSec: Long = 0L
 )
 
 @JsonClass(generateAdapter = true)

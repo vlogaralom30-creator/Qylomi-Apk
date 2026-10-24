@@ -73,7 +73,7 @@ object TikTokProviderConfig {
 
 object DirectVideoCache {
     private val cache = ConcurrentHashMap<String, Pair<String, Long>>()
-    private const val TTL_MS = 30 * 60 * 1000L // 30 minutes
+    private const val TTL_MS = 2 * 60 * 60 * 1000L // 2 hours (TikTok CDN URLs expire after 2-4 hours)
 
     fun get(originalUrl: String): String? {
         val entry = cache[originalUrl] ?: return null
@@ -86,6 +86,15 @@ object DirectVideoCache {
 
     fun put(originalUrl: String, directUrl: String) {
         cache[originalUrl] = directUrl to System.currentTimeMillis()
+    }
+
+    fun invalidate(originalUrl: String) {
+        cache.remove(originalUrl)
+    }
+
+    fun isExpired(originalUrl: String): Boolean {
+        val entry = cache[originalUrl] ?: return true
+        return (System.currentTimeMillis() - entry.second > TTL_MS)
     }
 }
 
@@ -161,8 +170,11 @@ class VideoExtractorViewModel : ViewModel() {
     }
 
     suspend fun reExtractDirectUrl(originalUrl: String): String? = withContext(Dispatchers.IO) {
-        DirectVideoCache.get(originalUrl)?.let { return@withContext it }
+        if (!DirectVideoCache.isExpired(originalUrl)) {
+            DirectVideoCache.get(originalUrl)?.let { return@withContext it }
+        }
         try {
+            DirectVideoCache.invalidate(originalUrl)
             val handler = VideoPlatformRegistry.resolve(originalUrl)
             val parsed = handler.parse(originalUrl) ?: ParsedVideo(handler.platformId, originalUrl)
             val res = handler.extract(parsed).getOrNull()

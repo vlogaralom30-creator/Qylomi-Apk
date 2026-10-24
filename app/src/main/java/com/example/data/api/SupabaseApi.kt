@@ -21,6 +21,7 @@ import com.example.data.model.PostReaction
 import com.example.data.model.ProfileUpdateRequest
 import com.example.data.model.SavedPost
 import com.example.data.model.UserProfile
+import com.example.data.model.*
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -406,4 +407,418 @@ interface SupabaseApi {
         @Query("post_id") postIdFilter: String,
         @Query("user_id") userIdFilter: String
     ): Response<Unit>
+
+    // =========================================================================
+    // SERIES SYSTEM ENDPOINTS (Live Supabase Backend)
+    // =========================================================================
+
+    // 12. Categories & Home
+    @GET("rest/v1/content_categories?order=sort_order.asc&select=*")
+    suspend fun getCategories(
+        @Query("is_active") isActiveFilter: String? = null
+    ): Response<List<ContentCategory>>
+
+    @POST("rest/v1/rpc/get_series_home")
+    suspend fun getSeriesHome(
+        @Body request: GetSeriesHomeRpcRequest
+    ): Response<List<ShelfWithItems>>
+
+    @POST("rest/v1/rpc/search_series")
+    suspend fun searchSeriesRpc(
+        @Body request: SearchSeriesRpcRequest
+    ): Response<List<SeriesCard>>
+
+    @POST("rest/v1/rpc/get_related_series")
+    suspend fun getRelatedSeriesRpc(
+        @Body request: GetRelatedSeriesRpcRequest
+    ): Response<List<SeriesCard>>
+
+    @POST("rest/v1/rpc/get_continue_watching")
+    suspend fun getContinueWatchingRpc(
+        @Body request: GetContinueWatchingRpcRequest,
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<ContinueWatchingItem>>
+
+    @POST("rest/v1/rpc/record_view")
+    suspend fun recordViewRpc(
+        @Body request: RecordViewRpcRequest,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @POST("rest/v1/rpc/set_user_role")
+    suspend fun setUserRoleRpc(
+        @Body request: SetUserRoleRpcRequest,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 13. Series CRUD & Lists
+    @GET("rest/v1/series?select=*,category:content_categories(slug,name)&limit=1")
+    suspend fun getSeriesBySlug(
+        @Query("slug") slugFilter: String
+    ): Response<List<Series>>
+
+    @GET("rest/v1/series?select=*,category:content_categories(slug,name)&limit=1")
+    suspend fun getSeriesById(
+        @Query("id") idFilter: String
+    ): Response<List<Series>>
+
+    @GET("rest/v1/series?select=*,category:content_categories(slug,name)")
+    suspend fun getSeriesList(
+        @retrofit2.http.QueryMap filters: Map<String, String>
+    ): Response<List<Series>>
+
+    @GET("rest/v1/series?select=*,category:content_categories(slug,name)&order=created_at.desc")
+    suspend fun getMySeries(
+        @Query("created_by") createdByFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Series>>
+
+    @GET("rest/v1/series?select=*,category:content_categories(slug,name)&order=created_at.desc")
+    suspend fun getAllSeriesAdmin(
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Series>>
+
+    @POST("rest/v1/series")
+    suspend fun createSeries(
+        @Body request: SeriesInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Series>>
+
+    @PATCH("rest/v1/series")
+    suspend fun updateSeries(
+        @Query("id") idFilter: String,
+        @Body updates: SeriesUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Series>>
+
+    @DELETE("rest/v1/series")
+    suspend fun deleteSeries(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 14. Seasons
+    @GET("rest/v1/series_seasons?order=season_number.asc")
+    suspend fun getSeasons(
+        @Query("series_id") seriesIdFilter: String
+    ): Response<List<Season>>
+
+    @POST("rest/v1/series_seasons")
+    suspend fun createSeason(
+        @Body request: SeasonInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Season>>
+
+    @PATCH("rest/v1/series_seasons")
+    suspend fun updateSeason(
+        @Query("id") idFilter: String,
+        @Body updates: SeasonUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Season>>
+
+    @DELETE("rest/v1/series_seasons")
+    suspend fun deleteSeason(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 15. Episodes
+    @GET("rest/v1/episodes?order=season_number.asc,episode_number.asc")
+    suspend fun getEpisodes(
+        @Query("series_id") seriesIdFilter: String,
+        @Query("is_published") isPublishedFilter: String? = null
+    ): Response<List<Episode>>
+
+    @POST("rest/v1/episodes")
+    suspend fun createEpisode(
+        @Body request: EpisodeInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Episode>>
+
+    @PATCH("rest/v1/episodes")
+    suspend fun updateEpisode(
+        @Query("id") idFilter: String,
+        @Body updates: EpisodeUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Episode>>
+
+    @DELETE("rest/v1/episodes")
+    suspend fun deleteEpisode(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 16. Sources
+    @GET("rest/v1/episode_sources?order=priority.asc")
+    suspend fun getSources(
+        @Query("episode_id") episodeIdFilter: String,
+        @Query("is_active") isActiveFilter: String? = null
+    ): Response<List<EpisodeSource>>
+
+    @POST("rest/v1/episode_sources")
+    suspend fun createSource(
+        @Body request: SourceInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<EpisodeSource>>
+
+    @PATCH("rest/v1/episode_sources")
+    suspend fun updateSource(
+        @Query("id") idFilter: String,
+        @Body updates: SourceUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<EpisodeSource>>
+
+    @DELETE("rest/v1/episode_sources")
+    suspend fun deleteSource(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 17. Shelves & Shelf Items
+    @GET("rest/v1/series_shelves?order=position.asc")
+    suspend fun getShelves(
+        @Query("is_active") isActiveFilter: String? = null,
+        @Query("type") typeFilter: String? = null
+    ): Response<List<Shelf>>
+
+    @POST("rest/v1/series_shelves")
+    suspend fun createShelf(
+        @Body request: ShelfInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Shelf>>
+
+    @PATCH("rest/v1/series_shelves")
+    suspend fun updateShelf(
+        @Query("id") idFilter: String,
+        @Body updates: ShelfUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<Shelf>>
+
+    @DELETE("rest/v1/series_shelves")
+    suspend fun deleteShelf(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/series_shelf_items?order=position.asc")
+    suspend fun getShelfItems(
+        @Query("shelf_id") shelfIdFilter: String
+    ): Response<List<ShelfItem>>
+
+    @POST("rest/v1/series_shelf_items?on_conflict=shelf_id,series_id")
+    suspend fun upsertShelfItem(
+        @Body item: ShelfItemInsert,
+        @Header("Prefer") prefer: String = "resolution=merge-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @DELETE("rest/v1/series_shelf_items")
+    suspend fun removeShelfItem(
+        @Query("shelf_id") shelfIdFilter: String,
+        @Query("series_id") seriesIdFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 18. Categories CRUD (Admin)
+    @POST("rest/v1/content_categories")
+    suspend fun createCategory(
+        @Body request: CategoryInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<ContentCategory>>
+
+    @PATCH("rest/v1/content_categories")
+    suspend fun updateCategory(
+        @Query("id") idFilter: String,
+        @Body updates: CategoryUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<ContentCategory>>
+
+    @DELETE("rest/v1/content_categories")
+    suspend fun deleteCategory(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 19. Watchlist, Likes, Ratings, Progress
+    @GET("rest/v1/series_watchlist?select=created_at,series:series(id,slug,title,poster_url,rating)&order=created_at.desc")
+    suspend fun getWatchlist(
+        @Query("user_id") userIdFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<SeriesWatchlistItem>>
+
+    @POST("rest/v1/series_watchlist")
+    suspend fun addToWatchlist(
+        @Body item: WatchlistInsert,
+        @Header("Prefer") prefer: String = "resolution=ignore-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @DELETE("rest/v1/series_watchlist")
+    suspend fun removeFromWatchlist(
+        @Query("series_id") seriesIdFilter: String,
+        @Query("user_id") userIdFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/series_likes")
+    suspend fun getSeriesLikes(
+        @Query("series_id") seriesIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<List<SeriesLikeItem>>
+
+    @POST("rest/v1/series_likes")
+    suspend fun likeSeries(
+        @Body item: SeriesLikeInsert,
+        @Header("Prefer") prefer: String = "resolution=ignore-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @DELETE("rest/v1/series_likes")
+    suspend fun unlikeSeries(
+        @Query("series_id") seriesIdFilter: String,
+        @Query("user_id") userIdFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/episode_likes")
+    suspend fun getEpisodeLikes(
+        @Query("episode_id") episodeIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<List<EpisodeLikeItem>>
+
+    @POST("rest/v1/episode_likes")
+    suspend fun likeEpisode(
+        @Body item: EpisodeLikeInsert,
+        @Header("Prefer") prefer: String = "resolution=ignore-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @DELETE("rest/v1/episode_likes")
+    suspend fun unlikeEpisode(
+        @Query("episode_id") episodeIdFilter: String,
+        @Query("user_id") userIdFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/series_ratings")
+    suspend fun getMyRating(
+        @Query("series_id") seriesIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<List<SeriesRating>>
+
+    @POST("rest/v1/series_ratings?on_conflict=series_id,user_id")
+    suspend fun rateSeries(
+        @Body rating: RatingUpsert,
+        @Header("Prefer") prefer: String = "resolution=merge-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/watch_progress")
+    suspend fun getProgress(
+        @Query("user_id") userIdFilter: String,
+        @Query("series_id") seriesIdFilter: String? = null,
+        @Query("episode_id") episodeIdFilter: String? = null,
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<WatchProgress>>
+
+    @POST("rest/v1/watch_progress?on_conflict=user_id,episode_id")
+    suspend fun upsertProgress(
+        @Body progress: ProgressUpsert,
+        @Header("Prefer") prefer: String = "resolution=merge-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 20. Series Comments
+    @GET("rest/v1/series_comments?order=created_at.desc&select=*,profile:profiles(username,display_name,avatar_url)")
+    suspend fun getSeriesComments(
+        @retrofit2.http.QueryMap filters: Map<String, String>
+    ): Response<List<SeriesComment>>
+
+    @POST("rest/v1/series_comments")
+    suspend fun insertSeriesComment(
+        @Body comment: CommentInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<SeriesComment>>
+
+    @PATCH("rest/v1/series_comments")
+    suspend fun updateSeriesCommentContent(
+        @Query("id") idFilter: String,
+        @Body updates: CommentUpdate,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<SeriesComment>>
+
+    @DELETE("rest/v1/series_comments")
+    suspend fun deleteSeriesComment(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/series_comment_likes")
+    suspend fun getSeriesCommentLikes(
+        @Query("comment_id") commentIdFilter: String,
+        @Query("user_id") userIdFilter: String
+    ): Response<List<SeriesCommentLike>>
+
+    @POST("rest/v1/series_comment_likes")
+    suspend fun likeSeriesComment(
+        @Body item: CommentLikeInsert,
+        @Header("Prefer") prefer: String = "resolution=ignore-duplicates",
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @DELETE("rest/v1/series_comment_likes")
+    suspend fun unlikeSeriesComment(
+        @Query("comment_id") commentIdFilter: String,
+        @Query("user_id") userIdFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    // 21. Source Reports & Moderation
+    @POST("rest/v1/source_reports")
+    suspend fun reportSource(
+        @Body report: ReportInsert,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<SourceReport>>
+
+    @GET("rest/v1/source_reports?select=*,source:episode_sources(id,label,url,episode:episodes(episode_number,series:series(slug,title))),profile:profiles(username,display_name,avatar_url)&order=created_at.desc")
+    suspend fun getSourceReports(
+        @Query("status") statusFilter: String? = null,
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<SourceReport>>
+
+    @PATCH("rest/v1/source_reports")
+    suspend fun updateSourceReportStatus(
+        @Query("id") idFilter: String,
+        @Body updates: ReportUpdateStatus,
+        @Header("Prefer") prefer: String = "return=representation",
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<SourceReport>>
+
+    @DELETE("rest/v1/source_reports")
+    suspend fun deleteSourceReport(
+        @Query("id") idFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<Unit>
+
+    @GET("rest/v1/profiles?select=*&limit=20")
+    suspend fun searchProfiles(
+        @Query("or") orFilter: String,
+        @Header("Authorization") userToken: String? = null
+    ): Response<List<UserProfile>>
 }
+

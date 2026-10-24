@@ -56,6 +56,25 @@ import com.example.ui.viewmodel.CommentsViewModel
 import com.example.ui.viewmodel.PostActionsViewModel
 import com.example.ui.viewmodel.SearchViewModel
 import com.example.ui.viewmodel.SocialViewModel
+import com.example.ui.viewmodel.CreatorStudioViewModel
+import com.example.ui.viewmodel.AdminStudioViewModel
+import com.example.ui.screens.studio.CreatorStudioScreen
+import com.example.ui.screens.studio.AdminStudioScreen
+import com.example.ui.viewmodel.SeriesViewModel
+import com.example.ui.screens.series.SeriesHomeScreen
+import com.example.ui.screens.series.SeriesListScreen
+import com.example.ui.screens.series.SeriesDetailsScreen
+import com.example.ui.screens.series.EpisodePlayerScreen
+import androidx.compose.runtime.mutableIntStateOf
+import com.example.ui.components.DrawerDestination
+import com.example.ui.components.QNavigationDrawerSheet
+import com.example.data.model.ShelfWithItems
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.example.ui.components.BrandedSplash
@@ -101,7 +120,10 @@ fun QSocialApp(
     viewModel: SocialViewModel = viewModel(),
     postActionsViewModel: PostActionsViewModel = viewModel(),
     commentsViewModel: CommentsViewModel = viewModel(),
-    searchViewModel: SearchViewModel = viewModel(factory = ViewModelProvider.AndroidViewModelFactory.getInstance(androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application))
+    searchViewModel: SearchViewModel = viewModel(factory = ViewModelProvider.AndroidViewModelFactory.getInstance(androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application)),
+    creatorStudioViewModel: CreatorStudioViewModel = viewModel(),
+    adminStudioViewModel: AdminStudioViewModel = viewModel(),
+    seriesViewModel: SeriesViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
@@ -143,6 +165,17 @@ fun QSocialApp(
     val commentLikers by commentsViewModel.commentLikers.collectAsState()
     val isCommentLikersLoading by commentsViewModel.isCommentLikersLoading.collectAsState()
 
+    // Drawer and Series state
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+
+    var isSeriesCatalogOpen by remember { mutableStateOf(false) }
+    var selectedSeriesSlug by remember { mutableStateOf<String?>(null) }
+    var selectedShelfForList by remember { mutableStateOf<ShelfWithItems?>(null) }
+    var activePlayerSeriesId by remember { mutableStateOf<String?>(null) }
+    var activePlayerEpisodeId by remember { mutableStateOf<String?>(null) }
+    var activePlayerStartPos by remember { mutableIntStateOf(0) }
+
     // UI state
     var currentTab by remember { mutableStateOf(SocialTab.FEED) }
     var isEditingProfile by remember { mutableStateOf(false) }
@@ -152,9 +185,21 @@ fun QSocialApp(
     var selectedGroupForPost by remember { mutableStateOf<com.example.data.model.GroupCommunity?>(null) }
     var isReelsScreenOpen by remember { mutableStateOf(false) }
     var selectedReelPost by remember { mutableStateOf<Post?>(null) }
+    var isCreatorStudioOpen by remember { mutableStateOf(false) }
+    var isAdminStudioOpen by remember { mutableStateOf(false) }
 
     var selectedPostForMenu by remember { mutableStateOf<Post?>(null) }
     var editingPost by remember { mutableStateOf<Post?>(null) }
+
+    LaunchedEffect(currentUser) {
+        if (currentUser == null) {
+            isCreatorStudioOpen = false
+            isAdminStudioOpen = false
+        } else {
+            if (!currentUser!!.canCreateSeries) isCreatorStudioOpen = false
+            if (!currentUser!!.isAdmin) isAdminStudioOpen = false
+        }
+    }
 
     // Auto-dismiss banner after 3 seconds
     LaunchedEffect(bannerMessage) {
@@ -197,48 +242,164 @@ fun QSocialApp(
             }
         )
     } else {
-        Scaffold(
-            topBar = {
-                if (!isEditingProfile && selectedUserProfile == null && selectedGroup == null && !isGroupsScreenOpen && !isReelsScreenOpen) {
-                    QTopAppBar(
-                        currentUser = currentUser,
-                        unreadNotifications = 2,
-                        onNotificationsClick = { currentTab = SocialTab.NOTIFICATIONS },
-                        onReelsClick = {
-                            selectedReelPost = null
-                            isReelsScreenOpen = true
-                        },
-                        onSearchClick = {
-                            searchViewModel.openSearchOverlay()
-                        },
-                        onProfileClick = {
-                            selectedUserProfile = null
-                            viewModel.selectGroup(null)
-                            isGroupsScreenOpen = false
-                            currentTab = SocialTab.PROFILE
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                QNavigationDrawerSheet(
+                    currentUser = currentUser,
+                    unreadNotifications = 2,
+                    selectedDestination = when {
+                        isCreatorStudioOpen -> DrawerDestination.CREATOR_STUDIO
+                        isAdminStudioOpen -> DrawerDestination.ADMIN_STUDIO
+                        isSeriesCatalogOpen -> DrawerDestination.SERIES
+                        isGroupsScreenOpen -> DrawerDestination.GROUPS
+                        isReelsScreenOpen -> DrawerDestination.REELS
+                        currentTab == SocialTab.FEED -> DrawerDestination.FEED
+                        currentTab == SocialTab.EXPLORE -> DrawerDestination.EXPLORE
+                        currentTab == SocialTab.NOTIFICATIONS -> DrawerDestination.NOTIFICATIONS
+                        else -> DrawerDestination.FEED
+                    },
+                    onDestinationSelect = { dest ->
+                        coroutineScope.launch { drawerState.close() }
+                        when (dest) {
+                            DrawerDestination.FEED -> {
+                                isSeriesCatalogOpen = false
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                isGroupsScreenOpen = false
+                                isReelsScreenOpen = false
+                                selectedUserProfile = null
+                                viewModel.selectGroup(null)
+                                currentTab = SocialTab.FEED
+                            }
+                            DrawerDestination.SERIES -> {
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                isSeriesCatalogOpen = true
+                            }
+                            DrawerDestination.EXPLORE -> {
+                                isSeriesCatalogOpen = false
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                isGroupsScreenOpen = false
+                                isReelsScreenOpen = false
+                                selectedUserProfile = null
+                                viewModel.selectGroup(null)
+                                currentTab = SocialTab.EXPLORE
+                            }
+                            DrawerDestination.GROUPS -> {
+                                isSeriesCatalogOpen = false
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                viewModel.loadGroups()
+                                isGroupsScreenOpen = true
+                            }
+                            DrawerDestination.REELS -> {
+                                isSeriesCatalogOpen = false
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                selectedReelPost = null
+                                isReelsScreenOpen = true
+                            }
+                            DrawerDestination.SAVED -> {
+                                isSeriesCatalogOpen = false
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                isGroupsScreenOpen = false
+                                isReelsScreenOpen = false
+                                selectedUserProfile = null
+                                viewModel.selectGroup(null)
+                                currentTab = SocialTab.PROFILE
+                            }
+                            DrawerDestination.NOTIFICATIONS -> {
+                                isSeriesCatalogOpen = false
+                                selectedSeriesSlug = null
+                                selectedShelfForList = null
+                                isGroupsScreenOpen = false
+                                isReelsScreenOpen = false
+                                selectedUserProfile = null
+                                viewModel.selectGroup(null)
+                                currentTab = SocialTab.NOTIFICATIONS
+                            }
+                            DrawerDestination.CREATOR_STUDIO -> {
+                                if (currentUser?.canCreateSeries == true) {
+                                    isCreatorStudioOpen = true
+                                }
+                            }
+                            DrawerDestination.ADMIN_STUDIO -> {
+                                if (currentUser?.isAdmin == true) {
+                                    isAdminStudioOpen = true
+                                }
+                            }
                         }
-                    )
-                }
-            },
-            bottomBar = {
-                if (!isEditingProfile && selectedUserProfile == null && selectedGroup == null && !isGroupsScreenOpen && !isReelsScreenOpen) {
-                    QBottomNavBar(
-                        selectedTab = currentTab,
-                        onTabSelected = { tab ->
-                            if (tab == SocialTab.CREATE) {
-                                isCreatePostOpen = true
-                            } else {
+                    },
+                    onLogoutClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        viewModel.logout()
+                    },
+                    onProfileClick = {
+                        coroutineScope.launch { drawerState.close() }
+                        selectedUserProfile = null
+                        viewModel.selectGroup(null)
+                        isGroupsScreenOpen = false
+                        currentTab = SocialTab.PROFILE
+                    }
+                )
+            }
+        ) {
+            BackHandler(enabled = drawerState.isOpen) {
+                coroutineScope.launch { drawerState.close() }
+            }
+
+            Scaffold(
+                topBar = {
+                    if (!isEditingProfile && selectedUserProfile == null && selectedGroup == null && !isGroupsScreenOpen && !isReelsScreenOpen && !isSeriesCatalogOpen) {
+                        QTopAppBar(
+                            currentUser = currentUser,
+                            unreadNotifications = 2,
+                            onNotificationsClick = { currentTab = SocialTab.NOTIFICATIONS },
+                            onMenuClick = {
+                                coroutineScope.launch { drawerState.open() }
+                            },
+                            onSeriesClick = {
+                                isSeriesCatalogOpen = true
+                            },
+                            onReelsClick = {
+                                selectedReelPost = null
+                                isReelsScreenOpen = true
+                            },
+                            onSearchClick = {
+                                searchViewModel.openSearchOverlay()
+                            },
+                            onProfileClick = {
                                 selectedUserProfile = null
                                 viewModel.selectGroup(null)
                                 isGroupsScreenOpen = false
-                                currentTab = tab
+                                currentTab = SocialTab.PROFILE
                             }
-                        }
-                    )
-                }
-            },
-            containerColor = QBackground
-        ) { innerPadding ->
+                        )
+                    }
+                },
+                bottomBar = {
+                    if (!isEditingProfile && selectedUserProfile == null && selectedGroup == null && !isGroupsScreenOpen && !isReelsScreenOpen && !isSeriesCatalogOpen) {
+                        QBottomNavBar(
+                            selectedTab = currentTab,
+                            onTabSelected = { tab ->
+                                if (tab == SocialTab.CREATE) {
+                                    isCreatePostOpen = true
+                                } else {
+                                    selectedUserProfile = null
+                                    viewModel.selectGroup(null)
+                                    isGroupsScreenOpen = false
+                                    isSeriesCatalogOpen = false
+                                    currentTab = tab
+                                }
+                            }
+                        )
+                    }
+                },
+                containerColor = QBackground
+            ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -279,7 +440,9 @@ fun QSocialApp(
                                 onToggleFollow = { target -> viewModel.toggleFollow(target) },
                                 isFollowing = viewModel.isUserFollowed(profile.id),
                                 onOpenMenu = { post -> selectedPostForMenu = post },
-                                onLikersClick = { post -> postActionsViewModel.openLikers(post) }
+                                onLikersClick = { post -> postActionsViewModel.openLikers(post) },
+                                onOpenCreatorStudio = if (profile.id == currentUser?.id && currentUser?.canCreateSeries == true) { { isCreatorStudioOpen = true } } else null,
+                                onOpenAdminStudio = if (profile.id == currentUser?.id && currentUser?.isAdmin == true) { { isAdminStudioOpen = true } } else null
                             )
                         }
                     }
@@ -402,7 +565,9 @@ fun QSocialApp(
                                         onToggleFollow = { target -> viewModel.toggleFollow(target) },
                                         isFollowing = false,
                                         onOpenMenu = { post -> selectedPostForMenu = post },
-                                        onLikersClick = { post -> postActionsViewModel.openLikers(post) }
+                                        onLikersClick = { post -> postActionsViewModel.openLikers(post) },
+                                        onOpenCreatorStudio = if (user.canCreateSeries) { { isCreatorStudioOpen = true } } else null,
+                                        onOpenAdminStudio = if (user.isAdmin) { { isAdminStudioOpen = true } } else null
                                     )
                                 }
                             }
@@ -766,6 +931,106 @@ fun QSocialApp(
                     onClose = { searchViewModel.closeTagFeed() }
                 )
             }
+
+            // Series Catalog Overlays
+            if (isSeriesCatalogOpen) {
+                when {
+                    activePlayerSeriesId != null -> {
+                        EpisodePlayerScreen(
+                            seriesId = activePlayerSeriesId!!,
+                            episodeId = activePlayerEpisodeId,
+                            initialPositionSec = activePlayerStartPos,
+                            onBackClick = {
+                                activePlayerSeriesId = null
+                                activePlayerEpisodeId = null
+                                activePlayerStartPos = 0
+                            },
+                            onNavigateToSeries = { nextSlug ->
+                                activePlayerSeriesId = null
+                                activePlayerEpisodeId = null
+                                activePlayerStartPos = 0
+                                selectedSeriesSlug = nextSlug
+                            },
+                            onOpenAuthDialog = {
+                                viewModel.setBanner("Please sign in to interact")
+                            }
+                        )
+                    }
+
+                    selectedSeriesSlug != null -> {
+                        SeriesDetailsScreen(
+                            slug = selectedSeriesSlug!!,
+                            viewModel = seriesViewModel,
+                            onBack = { selectedSeriesSlug = null },
+                            onPlayEpisode = { sId, epId ->
+                                activePlayerSeriesId = sId
+                                activePlayerEpisodeId = epId
+                                activePlayerStartPos = 0
+                            },
+                            onSeriesClick = { nextSlug ->
+                                selectedSeriesSlug = nextSlug
+                            },
+                            onAuthRequired = {
+                                viewModel.setBanner("Please log in to use this feature")
+                            }
+                        )
+                    }
+
+                    selectedShelfForList != null -> {
+                        val categoriesState by seriesViewModel.categories.collectAsState()
+                        val watchlistIdsState by seriesViewModel.watchlistIds.collectAsState()
+                        SeriesListScreen(
+                            shelfWithItems = selectedShelfForList,
+                            categories = categoriesState,
+                            watchlistIds = watchlistIdsState,
+                            onSeriesClick = { slug -> selectedSeriesSlug = slug },
+                            onWatchlistToggle = { card ->
+                                seriesViewModel.toggleWatchlist(card.id) {
+                                    viewModel.setBanner("Please log in to save to watchlist")
+                                }
+                            },
+                            onBack = { selectedShelfForList = null }
+                        )
+                    }
+
+                    else -> {
+                        SeriesHomeScreen(
+                            viewModel = seriesViewModel,
+                            onMenuClick = { coroutineScope.launch { drawerState.open() } },
+                            onSeriesClick = { slug -> selectedSeriesSlug = slug },
+                            onEpisodePlay = { sId, epId ->
+                                activePlayerSeriesId = sId
+                                activePlayerEpisodeId = epId
+                                activePlayerStartPos = 0
+                            },
+                            onSeeAllClick = { shelf -> selectedShelfForList = shelf },
+                            onAuthRequired = { viewModel.setBanner("Please log in to use this feature") }
+                        )
+                        BackHandler {
+                            isSeriesCatalogOpen = false
+                        }
+                    }
+                }
+            }
+
+            // Creator Studio Full Screen Overlay
+            if (isCreatorStudioOpen && currentUser != null) {
+                CreatorStudioScreen(
+                    viewModel = creatorStudioViewModel,
+                    currentUser = currentUser!!,
+                    onBack = { isCreatorStudioOpen = false }
+                )
+            }
+
+            // Admin Studio Full Screen Overlay
+            if (isAdminStudioOpen && currentUser != null) {
+                AdminStudioScreen(
+                    viewModel = adminStudioViewModel,
+                    currentUser = currentUser!!,
+                    onBack = { isAdminStudioOpen = false }
+                )
+            }
         }
     }
+}
 }

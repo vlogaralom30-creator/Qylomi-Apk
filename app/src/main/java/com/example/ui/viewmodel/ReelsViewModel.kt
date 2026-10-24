@@ -119,16 +119,63 @@ class ReelsViewModel(
         }
     }
 
+    private var prefetchJob: kotlinx.coroutines.Job? = null
+
+    fun updatePrefetchWindow(currentIndex: Int, context: android.content.Context) {
+        val list = _reels.value
+        if (list.isEmpty()) return
+
+        val connection = com.example.util.NetworkUtils.getConnectionType(context)
+        val windowSize = when (connection) {
+            com.example.util.NetworkUtils.ConnectionType.WIFI -> 7
+            com.example.util.NetworkUtils.ConnectionType.MOBILE -> 3
+            com.example.util.NetworkUtils.ConnectionType.OFFLINE_OR_DATA_SAVER -> 0
+        }
+
+        prefetchJob?.cancel()
+        if (windowSize == 0) return
+
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            // Keep i - 1 warm
+            if (currentIndex - 1 in list.indices) {
+                prefetchSingleItem(list[currentIndex - 1])
+            }
+
+            // Prefetch i + 1 to i + windowSize nearest-first
+            for (offset in 1..windowSize) {
+                val targetIndex = currentIndex + offset
+                if (targetIndex in list.indices) {
+                    prefetchSingleItem(list[targetIndex])
+                }
+            }
+        }
+    }
+
+    private suspend fun prefetchSingleItem(post: Post) {
+        val details = post.videoDetails
+        val sourceUrl = details?.videoUrl ?: post.externalUrl ?: return
+        val parsed = VideoEmbedUtils.parseVideoUrl(sourceUrl)
+        if (parsed.platform == "tiktok") {
+            try {
+                val key = com.example.player.resolver.MediaKey(url = sourceUrl, platform = "tiktok")
+                com.example.player.resolver.MediaResolver.resolve(key, force = false, isHighPriority = false)
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun resolveDirectStreamIfNeeded(post: Post) {
         val details = post.videoDetails
-        val directUrl = details?.directUrl
-        if (!directUrl.isNullOrBlank()) return
-
         val sourceUrl = details?.videoUrl ?: post.externalUrl ?: return
+        val directUrl = details?.directUrl
+
+        val isExpiredOrMissing = directUrl.isNullOrBlank() || DirectVideoCache.isExpired(sourceUrl)
+        if (!isExpiredOrMissing) return
+
         val parsed = VideoEmbedUtils.parseVideoUrl(sourceUrl)
         if (parsed.platform == "tiktok" || parsed.platform == "gdrive") {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
+                    DirectVideoCache.invalidate(sourceUrl)
                     val handler = com.example.video.VideoPlatformRegistry.resolve(sourceUrl)
                     val p = handler.parse(sourceUrl) ?: com.example.video.ParsedVideo(handler.platformId, sourceUrl)
                     val res = handler.extract(p).getOrNull()

@@ -1,4 +1,5 @@
 name: Build Qylomi APK
+run-name: Build Qylomi v1.0.${{ github.run_number }}
 
 on:
   push:
@@ -7,15 +8,11 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
     inputs:
-      build_type:
-        description: 'Select build type'
-        required: true
-        default: 'debug'
-        type: choice
-        options:
-          - debug
-          - release_unsigned
-          - both
+      build_debug:
+        description: 'Also build debug APK'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -35,77 +32,138 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+          cache: 'gradle'
 
-      - name: Set up Gradle 9.3.1
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.3.1'
 
-      - name: Prepare Environment and Secrets
+      - name: Prepare Environment
         run: |
-          echo "Setting up environment configuration..."
           if [ ! -f ".env" ] && [ -f ".env.example" ]; then
             cp .env.example .env
-            echo "Copied .env.example to .env"
           elif [ ! -f ".env" ]; then
             touch .env
-            echo "Created empty .env"
           fi
 
-      - name: Prepare Keystore
+      - name: Decode Keystores
+        id: decode_keystores
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "Configuring signing keystore..."
-          if [ -f "debug.keystore.base64" ] && [ ! -f "debug.keystore" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            echo "Successfully decoded debug.keystore from base64"
-          elif [ ! -f "debug.keystore" ]; then
-            keytool -genkey -v -keystore debug.keystore -alias androiddebugkey \
-              -storepass android -keypass android -keyalg RSA -keysize 2048 \
-              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            echo "Generated fallback debug.keystore"
+          # Make gradlew executable
+          chmod +x gradlew
+
+          # Decode Release Keystore if secret is present
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_MISSING=true" >> $GITHUB_ENV
+            echo "Warning: KEYSTORE_BASE64 secret is missing. Release signing is disabled."
           else
-            echo "debug.keystore is already present"
+            echo "$KEYSTORE_BASE64" | base64 -d > $RUNNER_TEMP/upload.jks
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> $GITHUB_ENV
           fi
 
-      - name: Build Debug APK
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.build_type == 'debug' || github.event.inputs.build_type == 'both' }}
-        run: |
-          echo "Building Debug APK with Gradle..."
-          gradle :app:assembleDebug --no-daemon --stacktrace
+          # Decode Debug Keystore if it exists in the repo
+          if [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+            echo "Debug keystore decoded from repository."
+          fi
 
-      - name: Build Release (Unsigned) APK
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build_type == 'release_unsigned' || github.event.inputs.build_type == 'both') }}
+      - name: Build Release APK
+        if: env.KEYSTORE_MISSING != 'true'
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "Building Release APK with Gradle..."
-          gradle :app:assembleRelease --no-daemon --stacktrace || true
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          
+      - name: Build Debug APK (Optional)
+        if: ${{ github.event.inputs.build_debug == 'true' || github.event_name == 'pull_request' || env.KEYSTORE_MISSING == 'true' }}
+        run: |
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verify Release APK
+        if: env.KEYSTORE_MISSING != 'true'
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -n "$APK_PATH" ]; then
+            echo "APK_SIZE=$(ls -lh $APK_PATH | awk '{print $5}')" >> $GITHUB_ENV
+            apksigner verify --print-certs "$APK_PATH" | grep "SHA-256"
+          else
+            echo "Release APK not found for verification."
+          fi
+
 
       - name: Prepare Artifacts
+        if: always()
         run: |
-          mkdir -p dist
-          find app/build/outputs/apk -type f -name "*.apk" -exec cp {} dist/ \;
-          echo "Listing generated APK files in dist/:"
-          ls -la dist/
+          mkdir -p dist/mapping
+          # Locate and copy all APKs to dist/
+          echo "Searching for APKs..."
+          find app/build/outputs/apk -type f -name "*.apk" -print -exec cp {} dist/ \;
+          
+          # Copy ProGuard mapping if available
+          if [ -d "app/build/outputs/mapping/release" ]; then
+            cp app/build/outputs/mapping/release/mapping.txt dist/mapping/ || true
+          fi
+          
+          echo "Contents of dist directory:"
+          ls -R dist
 
-      - name: Upload Debug APK Artifact
+      - name: Upload Release APK
+        if: success() && env.KEYSTORE_MISSING != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Qylomi-Android-APK
-          path: dist/*.apk
+          name: Qylomi-v1.0.${{ github.run_number }}-Release-APK
+          path: dist/*-release.apk
           retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload Debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qylomi-v1.0.${{ github.run_number }}-Debug-APK
+          path: dist/*-debug.apk
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload ProGuard Mapping
+        if: success() && env.KEYSTORE_MISSING != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qylomi-v1.0.${{ github.run_number }}-ProGuard-Mapping
+          path: dist/mapping/mapping.txt
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Generate Workflow Summary
+        if: always()
         run: |
-          echo "### 🚀 Qylomi Android Build Succeeded!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Qylomi Build v1.0.${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| **App Name** | Qylomi |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
+            echo "| **Build Type** | ⚠️ Debug (Unsigned) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Status** | Missing KEYSTORE_BASE64 secret |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Build Type** | ✅ Release (Stably Signed) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Release Size** | \`${{ env.APK_SIZE || 'N/A' }}\` |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### Generated APK Files:" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          ls -lh dist/ >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
+            echo "> **Note**: Signing is currently disabled because the release secrets are not yet set up. Please follow the instructions in the final report to generate and add your keystore secrets." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "#### Artifacts Summary:" >> $GITHUB_STEP_SUMMARY
+          ls -lh dist/*.apk 2>/dev/null | awk '{print "- " $9 " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY || echo "No APKs found." >> $GITHUB_STEP_SUMMARY
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the APK from the **Artifacts** section at the top of this run summary." >> $GITHUB_STEP_SUMMARY
+          echo "Download APKs from the **Artifacts** section at the top of this page." >> $GITHUB_STEP_SUMMARY
+

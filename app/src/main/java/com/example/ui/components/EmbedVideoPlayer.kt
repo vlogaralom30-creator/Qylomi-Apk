@@ -186,6 +186,7 @@ fun EmbedVideoPlayer(
                                 settings.domStorageEnabled = true
                                 settings.mediaPlaybackRequiresUserGesture = false
                                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
                                 webChromeClient = WebChromeClient()
                                 webViewClient = object : WebViewClient() {
@@ -215,7 +216,14 @@ fun EmbedVideoPlayer(
                                     </html>
                                 """.trimIndent()
 
-                                loadDataWithBaseURL("https://www.youtube.com", htmlContent, "text/html", "utf-8", null)
+                                val baseUrl = when (detectedInfo.platform) {
+                                    "tiktok" -> "https://www.tiktok.com"
+                                    "facebook" -> "https://www.facebook.com"
+                                    "instagram" -> "https://www.instagram.com"
+                                    else -> "https://www.youtube.com"
+                                }
+
+                                loadDataWithBaseURL(baseUrl, htmlContent, "text/html", "utf-8", null)
                             }
                         },
                         modifier = Modifier.fillMaxSize()

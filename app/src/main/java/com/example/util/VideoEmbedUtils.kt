@@ -38,8 +38,9 @@ object VideoEmbedUtils {
                 }
             }
             "tiktok" -> {
-                if (parsed?.videoId != null) {
-                    "https://www.tiktok.com/embed/v2/${parsed.videoId}"
+                val videoId = parsed?.videoId ?: extractTikTokId(trimmed)
+                if (videoId != null) {
+                    "https://www.tiktok.com/embed/v2/$videoId"
                 } else {
                     trimmed
                 }
@@ -69,5 +70,15 @@ object VideoEmbedUtils {
             embedUrl = embedUrl,
             platformDisplayName = handler.displayName
         )
+    }
+
+    private fun extractTikTokId(url: String): String? {
+        val pattern = java.util.regex.Pattern.compile("(?:video/|v/|/embed/v2/|/photo/)(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+        val matcher = pattern.matcher(url)
+        if (matcher.find()) return matcher.group(1)
+        val fallbackPattern = java.util.regex.Pattern.compile("/(\\d{15,20})", java.util.regex.Pattern.CASE_INSENSITIVE)
+        val fallbackMatcher = fallbackPattern.matcher(url)
+        if (fallbackMatcher.find()) return fallbackMatcher.group(1)
+        return null
     }
 }

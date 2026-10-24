@@ -2,8 +2,10 @@ package com.example.data.api
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
@@ -46,16 +48,29 @@ object SupabaseClient {
 
     private val authInterceptor = Interceptor { chain ->
         val original = chain.request()
+        val path = original.url.encodedPath
+
         val requestBuilder = original.newBuilder()
             .header("apikey", activeKey)
             .header("Content-Type", "application/json")
 
-        // If no Authorization header is present on the request, add default
-        val existingAuth = original.header("Authorization")
-        if (existingAuth.isNullOrBlank()) {
-            val token = authToken
-            if (!token.isNullOrBlank()) {
-                requestBuilder.header("Authorization", "Bearer $token")
+        if (!path.contains("/auth/v1/token")) {
+            val sm = SessionManager.instance
+            val activeSession = sm?.getActiveSession()
+            val validToken = if (activeSession != null) {
+                // If token is expiring within 90s, do a proactive refresh
+                if (sm.isTokenExpired(activeSession)) {
+                    val refreshed = sm.refreshSession()
+                    refreshed?.accessToken ?: activeSession.accessToken
+                } else {
+                    activeSession.accessToken
+                }
+            } else {
+                authToken
+            }
+
+            if (!validToken.isNullOrBlank()) {
+                requestBuilder.header("Authorization", "Bearer $validToken")
             } else {
                 requestBuilder.header("Authorization", "Bearer $activeKey")
             }
@@ -64,12 +79,41 @@ object SupabaseClient {
         chain.proceed(requestBuilder.build())
     }
 
+    private val auth401Authenticator = Authenticator { _, response ->
+        if (responseCount(response) >= 2) return@Authenticator null
+
+        val sm = SessionManager.instance ?: return@Authenticator null
+        val body = try { response.peekBody(1024).string() } catch (_: Exception) { "" }
+
+        if (response.code == 401 || body.contains("PGRST301") || body.contains("JWT expired")) {
+            val refreshed = sm.refreshSession()
+            if (refreshed != null) {
+                setAuthToken(refreshed.accessToken)
+                return@Authenticator response.request.newBuilder()
+                    .header("Authorization", "Bearer ${refreshed.accessToken}")
+                    .build()
+            }
+        }
+        null
+    }
+
+    private fun responseCount(response: Response): Int {
+        var count = 1
+        var prior = response.priorResponse
+        while (prior != null) {
+            count++
+            prior = prior.priorResponse
+        }
+        return count
+    }
+
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
+        .authenticator(auth401Authenticator)
         .addInterceptor(loggingInterceptor)
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)

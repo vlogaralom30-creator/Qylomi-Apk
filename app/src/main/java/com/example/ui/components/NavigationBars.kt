@@ -20,10 +20,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
@@ -62,6 +64,8 @@ fun QTopAppBar(
     unreadNotifications: Int = 0,
     onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onMenuClick: (() -> Unit)? = null,
+    onSeriesClick: (() -> Unit)? = null,
     onReelsClick: (() -> Unit)? = null,
     onSearchClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -74,13 +78,30 @@ fun QTopAppBar(
             .background(QSurface)
             .statusBarsPadding()
             .border(width = 0.5.dp, color = QCardBorder)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        // Left Branding
+        // Left Branding with Hamburger Menu
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.testTag("app_branding")
         ) {
+            if (onMenuClick != null) {
+                IconButton(
+                    onClick = onMenuClick,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .testTag("top_menu_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Menu",
+                        tint = QOnSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -107,6 +128,24 @@ fun QTopAppBar(
 
         // Right Action Items
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Series & Anime Catalog shortcut button
+            if (onSeriesClick != null) {
+                IconButton(
+                    onClick = onSeriesClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("top_series_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VideoLibrary,
+                        contentDescription = "Series & Anime",
+                        tint = QYellowDark,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(2.dp))
+            }
+
             // Search button
             if (onSearchClick != null) {
                 IconButton(
