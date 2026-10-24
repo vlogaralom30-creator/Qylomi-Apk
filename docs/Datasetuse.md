@@ -351,7 +351,7 @@ Qylomi uses an M:N (many-to-many) relationship between `posts` and `tags`.
 
 ### `tags` Table Definition
 - `id` (`UUID`, PK)
-- `name` (`TEXT`, UNIQUE, lowercase alphanumeric e.g. `'react'`, `'typescript'`, `'video'`)
+- `name` (`TEXT`, UNIQUE lowercase alphanumeric e.g. `'react'`, `'typescript'`, `'video'`)
 - `posts_count` (`INTEGER`, default 0)
 - `created_at` (`TIMESTAMPTZ`, default `now()`)
 

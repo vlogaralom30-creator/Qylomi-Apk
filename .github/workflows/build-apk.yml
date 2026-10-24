@@ -4,8 +4,16 @@ run-name: Build Qylomi v1.0.${{ github.run_number }}
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'migration_*.sql'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'migration_*.sql'
   workflow_dispatch:
     inputs:
       build_debug:
@@ -21,21 +29,23 @@ concurrency:
 jobs:
   build:
     name: Build Android APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: 'gradle'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Prepare Environment
         run: |
@@ -58,7 +68,6 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          # Ensure gradlew executable
           chmod +x gradlew
 
           # Decode Release Keystore if secret is present
@@ -83,44 +92,57 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
           
       - name: Build Debug APK (Optional)
         if: ${{ github.event.inputs.build_debug == 'true' || github.event_name == 'pull_request' || env.KEYSTORE_MISSING == 'true' }}
         run: |
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Run Unit Tests (Non-blocking)
+        if: always()
+        continue-on-error: true
+        run: |
+          ./gradlew :app:testDebugUnitTest --no-daemon || echo "UNIT_TEST_FAILED=true" >> $GITHUB_ENV
 
       - name: Verify Release APK
-        if: env.KEYSTORE_MISSING != 'true'
+        if: env.KEYSTORE_MISSING != 'true' && success()
         run: |
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -n "$APK_PATH" ]; then
             echo "APK_SIZE=$(ls -lh $APK_PATH | awk '{print $5}')" >> $GITHUB_ENV
-            apksigner verify --print-certs "$APK_PATH" | grep "SHA-256"
+            APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | sort -V | tail -n 1)
+            if [ -n "$APKSIGNER" ]; then
+              $APKSIGNER verify --print-certs "$APK_PATH" | grep "SHA-256"
+            else
+              echo "apksigner not found in build-tools"
+            fi
           else
             echo "Release APK not found for verification."
           fi
-
 
       - name: Prepare Artifacts
         if: always()
         run: |
           mkdir -p dist/mapping
-          # Locate and copy all APKs to dist/
           echo "Searching for APKs..."
-          find app/build/outputs/apk -type f -name "*.apk" -print -exec cp {} dist/ \;
+          if [ -d app/build/outputs/apk ]; then
+            find app/build/outputs/apk -type f -name "*.apk" -exec cp {} dist/ \; || true
+          else
+            echo "No APK output folder (build failed earlier)"
+          fi
           
-          # Copy ProGuard mapping if available
-          if [ -d "app/build/outputs/mapping/release" ]; then
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
             cp app/build/outputs/mapping/release/mapping.txt dist/mapping/ || true
           fi
           
-          echo "Contents of dist directory:"
-          ls -R dist
+          ls -R dist || true
 
       - name: Upload Release APK
         if: success() && env.KEYSTORE_MISSING != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Qylomi-v1.0.${{ github.run_number }}-Release-APK
           path: dist/*-release.apk
@@ -129,7 +151,7 @@ jobs:
 
       - name: Upload Debug APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Qylomi-v1.0.${{ github.run_number }}-Debug-APK
           path: dist/*-debug.apk
@@ -138,35 +160,68 @@ jobs:
 
       - name: Upload ProGuard Mapping
         if: success() && env.KEYSTORE_MISSING != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Qylomi-v1.0.${{ github.run_number }}-ProGuard-Mapping
           path: dist/mapping/mapping.txt
           retention-days: 30
           if-no-files-found: warn
 
+      - name: Upload Build Log on Failure
+        if: failure() && hashFiles('build.log') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 3
+
+      - name: Capture Build Failure Details
+        if: failure() && hashFiles('build.log') != ''
+        run: |
+          echo "### ❌ Build Failure Details" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### What Went Wrong:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A15 "What went wrong" build.log || echo "No 'What went wrong' section found in build.log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Kotlin Compile Errors (^e:):" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep "^e: " build.log | head -n 40 || echo "No Kotlin compile errors found" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
       - name: Generate Workflow Summary
         if: always()
         run: |
-          echo "### 🚀 Qylomi Build v1.0.${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          STATUS="${{ job.status }}"
+          STATUS_EMOJI="✅"
+          if [ "$STATUS" != "success" ]; then
+            STATUS_EMOJI="❌"
+          fi
+
+          echo "### $STATUS_EMOJI Qylomi Build v1.0.${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | $STATUS |" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
-            echo "| **Build Type** | ⚠️ Debug (Unsigned) |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Status** | Missing KEYSTORE_BASE64 secret |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Build Type** | ⚠️ Debug (debug key) |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| **Build Type** | ✅ Release (Stably Signed) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Build Type** | ✅ Release (signed) |" >> $GITHUB_STEP_SUMMARY
             echo "| **Release Size** | \`${{ env.APK_SIZE || 'N/A' }}\` |" >> $GITHUB_STEP_SUMMARY
-          fi
+          end
           
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
-            echo "> **Note**: Signing is currently disabled because the release secrets are not yet set up. Please follow the instructions in the final report to generate and add your keystore secrets." >> $GITHUB_STEP_SUMMARY
+            echo "> **Note**: Debug build used because release secrets are missing. To build signed release APKs, add `KEYSTORE_BASE64`, `STORE_PASSWORD`, and `KEY_PASSWORD` secrets." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ env.UNIT_TEST_FAILED }}" == "true" ]; then
+            echo "> **Warning**: Unit tests had failures (non-blocking)." >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "#### Artifacts Summary:" >> $GITHUB_STEP_SUMMARY
@@ -174,4 +229,3 @@ jobs:
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Download APKs from the **Artifacts** section at the top of this page." >> $GITHUB_STEP_SUMMARY
-

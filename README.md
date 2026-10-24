@@ -16,15 +16,26 @@ Modern social networking Android application built with Jetpack Compose, Kotlin 
 This repository is equipped with an automated CI/CD workflow at `.github/workflows/build-apk.yml`.
 
 ### How It Works:
-1. **Automatic Build on Push & PR**: Whenever changes are pushed to `main` or `master` branches, or a pull request is submitted, the workflow automatically triggers.
+1. **Automatic Build on Push & PR**: Whenever changes are pushed to `main` or `master` branches (ignoring markdown/docs/SQL changes), or a pull request is submitted, the workflow automatically triggers.
 2. **Manual Dispatch (On-Demand)**:
    - Go to your repository's **Actions** tab on GitHub.
    - Select **"Build Qylomi APK"** from the left sidebar.
-   - Click **Run workflow**, choose your branch, select the desired build type (`debug`, `release_unsigned`, or `both`), and click **Run workflow**.
-3. **Download Your APK**:
-   - When the workflow run completes (typically in ~2-3 minutes), click into the run details.
-   - Scroll down to the **Artifacts** section at the bottom (or summary top).
-   - Click **`Qylomi-Android-APK`** to download the zip file containing the ready-to-install Android APK (`app-debug.apk`).
+   - Click **Run workflow**, choose your branch, optionally toggle `build_debug` (`true` to build debug APK), and click **Run workflow**.
+3. **Download Your APKs & Artifacts**:
+   - When the workflow run completes, click into the run summary.
+   - Download artifacts:
+     - `Qylomi-v1.0.<run>-Debug-APK`: Debug APK (signed with debug key).
+     - `Qylomi-v1.0.<run>-Release-APK`: Release APK (signed with your release keystore, if secrets are configured).
+     - `Qylomi-v1.0.<run>-ProGuard-Mapping`: ProGuard mapping file for crash reporting (release builds).
+     - `build-log`: Uploaded automatically if any build step fails, containing full Gradle error logs.
+
+### Setting Up Keystore Secrets & Debug Signing:
+- **Release Signing**: Add the following GitHub Secrets to your repository:
+  - `KEYSTORE_BASE64`: Base64-encoded release keystore (`upload.jks`, key alias: `upload`).
+  - `STORE_PASSWORD`: Keystore store password.
+  - `KEY_PASSWORD`: Key password.
+- **Debug Signing**: For consistent debug APK signatures, generate and commit `debug.keystore.base64` as detailed in [docs/DEBUG_KEYSTORE.md](docs/DEBUG_KEYSTORE.md).
+- **Reading Build Failures**: If a build fails, check the GitHub Action run summary for the **"Build Failure Details"** section, which automatically extracts the Gradle "What went wrong" block and Kotlin `e: ` error lines.
 
 ---
 
@@ -80,4 +91,3 @@ Qylomi incorporates a dedicated Series, Anime, Movies, and TV Shows system power
   - Filtering by genre, language, and release status.
   - Sorting: Latest, Top Rated, Popular, and A-Z.
   - Offset pagination with "Load more".
-
