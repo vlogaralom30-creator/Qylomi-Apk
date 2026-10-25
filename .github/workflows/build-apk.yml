@@ -192,40 +192,42 @@ jobs:
 
       - name: Generate Workflow Summary
         if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          KEYSTORE_MISSING: ${{ env.KEYSTORE_MISSING }}
+          APK_SIZE: ${{ env.APK_SIZE }}
+          RUN_NUMBER: ${{ github.run_number }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          STATUS="${{ job.status }}"
-          STATUS_EMOJI="✅"
-          if [ "$STATUS" != "success" ]; then
-            STATUS_EMOJI="❌"
-          fi
-
-          echo "### $STATUS_EMOJI Qylomi Build v1.0.${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | $STATUS |" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
-            echo "| **Build Type** | ⚠️ Debug (debug key) |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| **Build Type** | ✅ Release (signed) |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Release Size** | \`${{ env.APK_SIZE || 'N/A' }}\` |" >> $GITHUB_STEP_SUMMARY
-          end
-          
-          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ env.KEYSTORE_MISSING }}" == "true" ]; then
-            echo "> **Note**: Debug build used because release secrets are missing. To build signed release APKs, add `KEYSTORE_BASE64`, `STORE_PASSWORD`, and `KEY_PASSWORD` secrets." >> $GITHUB_STEP_SUMMARY
-          fi
-
-          if [ "${{ env.UNIT_TEST_FAILED }}" == "true" ]; then
-            echo "> **Warning**: Unit tests had failures (non-blocking)." >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "#### Artifacts Summary:" >> $GITHUB_STEP_SUMMARY
-          ls -lh dist/*.apk 2>/dev/null | awk '{print "- " $9 " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY || echo "No APKs found." >> $GITHUB_STEP_SUMMARY
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download APKs from the **Artifacts** section at the top of this page." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### Qylomi Build v1.0.${RUN_NUMBER}"
+            echo ""
+            echo "| Property | Value |"
+            echo "| --- | --- |"
+            if [ "$JOB_STATUS" = "success" ]; then
+              echo "| **Result** | ✅ Success |"
+            else
+              echo "| **Result** | ❌ ${JOB_STATUS} |"
+            fi
+            if [ "$KEYSTORE_MISSING" = "true" ]; then
+              echo "| **Build Type** | Debug (debug key) |"
+              echo "| **Release** | Skipped: KEYSTORE_BASE64 secret not set |"
+            else
+              echo "| **Build Type** | Release (signed) |"
+              echo "| **Release Size** | ${APK_SIZE:-N/A} |"
+            fi
+            echo "| **Branch** | ${REF_NAME} |"
+            echo "| **Commit** | ${COMMIT_SHA} |"
+            echo ""
+            echo "#### APKs"
+            if ls dist/*.apk >/dev/null 2>&1; then
+              for f in dist/*.apk; do
+                echo "- $(basename "$f") ($(du -h "$f" | cut -f1))"
+              done
+            else
+              echo "No APKs found."
+            fi
+            echo ""
+            echo "Download APKs from the Artifacts section at the top of this page."
+          } >> "$GITHUB_STEP_SUMMARY"
