@@ -105,22 +105,22 @@ fun QTopAppBar(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(32.dp)
                     .clip(CircleShape)
                     .background(QYellowPrimary)
             ) {
                 Text(
                     text = "Q",
                     fontWeight = FontWeight.Black,
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     color = QOnYellow
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Social",
+                text = "ylomi",
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 color = QOnSurface,
                 letterSpacing = (-0.5).sp
             )
