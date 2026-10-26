@@ -189,8 +189,8 @@ class TikTokLegacyHandler : VideoPlatformHandler {
         return try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36")
-                .head()
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .get()
                 .build()
             val response = VideoPlayerCache.okHttpClient.newCall(request).execute()
             val finalUrl = response.request.url.toString()
@@ -200,6 +200,7 @@ class TikTokLegacyHandler : VideoPlatformHandler {
             url
         }
     }
+
 
     private fun fetchUrlText(urlString: String): String? {
         return try {
@@ -320,12 +321,17 @@ private fun TikTokSmartPlayer(
                                 }
                             }
                         } else {
-                            resolveState = com.example.player.resolver.MediaResolveState.Failed(
-                                "Couldn't load this video. Check your connection and retry.",
-                                rawError
-                            )
+                            resolveState = com.example.player.resolver.MediaResolveState.Fallback(video)
                         }
                     }
+                )
+            }
+
+            is com.example.player.resolver.MediaResolveState.Fallback -> {
+                com.example.ui.components.EmbedVideoPlayer(
+                    videoUrl = state.video.embedUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    title = state.video.title ?: "TikTok Video"
                 )
             }
 

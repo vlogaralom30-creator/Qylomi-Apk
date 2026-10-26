@@ -163,7 +163,9 @@ data class Episode(
     @Json(name = "created_at") val createdAt: String? = null,
     @Json(name = "updated_at") val updatedAt: String? = null,
     // Optional embed
-    @Json(name = "series") val series: SeriesCard? = null
+    @Json(name = "series") val series: SeriesCard? = null,
+    val watchedProgressPercent: Double = 0.0,
+    val isCompleted: Boolean = false
 )
 
 @JsonClass(generateAdapter = true)

@@ -26,3 +26,12 @@ val QRelayGreen = Color(0xFF10B981)
 val QVerifiedBlue = Color(0xFF0284C7)
 val QBadgeGold = Color(0xFFEAB308)
 val QCardBorder = Color(0xFFF1F5F9)
+
+// Crunchyroll & Anime Dark Theme Tokens
+val QCrunchyOrange = Color(0xFFF47521)
+val QCrunchyOrangeDark = Color(0xFFD35400)
+val QDarkObsidian = Color(0xFF0F1014)
+val QDarkCharcoal = Color(0xFF181A20)
+val QDarkSurface = Color(0xFF1F222B)
+val QDarkBorder = Color(0xFF2E3342)
+

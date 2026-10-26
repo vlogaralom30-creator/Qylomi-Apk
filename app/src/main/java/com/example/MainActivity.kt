@@ -131,6 +131,7 @@ fun QSocialApp(
     val feedPosts by viewModel.feedPosts.collectAsState()
     val isFeedLoading by viewModel.isFeedLoading.collectAsState()
     val isFeedRefreshing by viewModel.isFeedRefreshing.collectAsState()
+    val feedError by viewModel.feedError.collectAsState()
     val isProfileRefreshing by viewModel.isProfileRefreshing.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val allProfiles by viewModel.allProfiles.collectAsState()
@@ -517,7 +518,9 @@ fun QSocialApp(
                                         isReelsScreenOpen = true
                                     },
                                     onOpenMenu = { post -> selectedPostForMenu = post },
-                                    onLikersClick = { post -> postActionsViewModel.openLikers(post) }
+                                    onLikersClick = { post -> postActionsViewModel.openLikers(post) },
+                                    feedError = feedError,
+                                    onRetryFeed = { viewModel.loadFeed() }
                                 )
                             }
 

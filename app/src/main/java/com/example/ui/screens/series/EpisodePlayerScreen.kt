@@ -38,6 +38,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.data.model.*
 import com.example.ui.components.EpisodePlayerView
+import com.example.ui.components.EpisodeThumbnail
+import com.example.ui.components.NumberedEpisodeGrid
 import com.example.ui.components.SeriesCardItem
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlayerViewModel
@@ -230,7 +232,7 @@ fun EpisodePlayerScreen(
                     TabRow(
                         selectedTabIndex = uiState.selectedTab,
                         containerColor = QSurface,
-                        contentColor = Color.White,
+                        contentColor = QOnSurface,
                         indicator = { tabPositions ->
                             if (uiState.selectedTab < tabPositions.size) {
                                 TabRowDefaults.SecondaryIndicator(
@@ -243,7 +245,7 @@ fun EpisodePlayerScreen(
                         Tab(
                             selected = uiState.selectedTab == 0,
                             onClick = { viewModel.setSelectedTab(0) },
-                            text = { Text("Episodes", fontWeight = FontWeight.SemiBold) },
+                            text = { Text("Episodes", fontWeight = FontWeight.SemiBold, color = if (uiState.selectedTab == 0) QYellowPrimary else QOnSurfaceVariant) },
                             modifier = Modifier.testTag("player_tab_episodes")
                         )
                         Tab(
@@ -252,7 +254,8 @@ fun EpisodePlayerScreen(
                             text = {
                                 Text(
                                     "Comments (${uiState.comments.size})",
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (uiState.selectedTab == 1) QYellowPrimary else QOnSurfaceVariant
                                 )
                             },
                             modifier = Modifier.testTag("player_tab_comments")
@@ -260,7 +263,7 @@ fun EpisodePlayerScreen(
                         Tab(
                             selected = uiState.selectedTab == 2,
                             onClick = { viewModel.setSelectedTab(2) },
-                            text = { Text("More Like This", fontWeight = FontWeight.SemiBold) },
+                            text = { Text("More Like This", fontWeight = FontWeight.SemiBold, color = if (uiState.selectedTab == 2) QYellowPrimary else QOnSurfaceVariant) },
                             modifier = Modifier.testTag("player_tab_related")
                         )
                     }
@@ -283,14 +286,16 @@ fun EpisodePlayerScreen(
                             uiState.episodes.filter { it.seasonNumber == uiState.selectedSeasonNumber }
                         } else uiState.episodes
 
-                        items(filteredEps, key = { it.id }) { ep ->
-                            EpisodeListItem(
-                                episode = ep,
-                                isCurrentlyPlaying = ep.id == currentEp?.id,
-                                onSelectEpisode = { viewModel.selectEpisode(ep) }
+                        item {
+                            NumberedEpisodeGrid(
+                                episodes = filteredEps,
+                                currentEpisodeId = currentEp?.id,
+                                onEpisodeClick = { ep -> viewModel.selectEpisode(ep) },
+                                modifier = Modifier.padding(bottom = 16.dp)
                             )
                         }
                     }
+
 
                     1 -> { // COMMENTS TAB
                         item {
@@ -439,7 +444,7 @@ fun EpisodeHeaderSection(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = episode?.let { "S${it.seasonNumber}:E${it.episodeNumber} • ${it.title ?: "Episode ${it.episodeNumber}"}" } ?: "",
-            color = Color.White,
+            color = QOnSurface,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
@@ -494,13 +499,13 @@ fun EpisodeHeaderSection(
                 Icon(
                     imageVector = if (isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Like",
-                    tint = if (isLiked) QYellowPrimary else Color.White,
+                    tint = if (isLiked) QYellowPrimary else QOnSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (likesCount > 0) "$likesCount" else "Like",
-                    color = if (isLiked) QYellowPrimary else Color.White,
+                    color = if (isLiked) QYellowPrimary else QOnSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -513,13 +518,13 @@ fun EpisodeHeaderSection(
                 Icon(
                     imageVector = if (isInWatchlist) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
                     contentDescription = "My List",
-                    tint = if (isInWatchlist) QYellowPrimary else Color.White,
+                    tint = if (isInWatchlist) QYellowPrimary else QOnSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "My List",
-                    color = if (isInWatchlist) QYellowPrimary else Color.White,
+                    color = if (isInWatchlist) QYellowPrimary else QOnSurfaceVariant,
                     fontSize = 11.sp
                 )
             }
@@ -532,11 +537,11 @@ fun EpisodeHeaderSection(
                 Icon(
                     imageVector = Icons.Outlined.Share,
                     contentDescription = "Share",
-                    tint = Color.White,
+                    tint = QOnSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Share", color = Color.White, fontSize = 11.sp)
+                Text(text = "Share", color = QOnSurfaceVariant, fontSize = 11.sp)
             }
 
             // Report
@@ -547,11 +552,11 @@ fun EpisodeHeaderSection(
                 Icon(
                     imageVector = Icons.Outlined.Flag,
                     contentDescription = "Report",
-                    tint = Color.White,
+                    tint = QOnSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Report", color = Color.White, fontSize = 11.sp)
+                Text(text = "Report", color = QOnSurfaceVariant, fontSize = 11.sp)
             }
         }
     }
@@ -570,7 +575,7 @@ fun ServerChipsSection(
     ) {
         Text(
             text = "Streaming Servers",
-            color = Color.White,
+            color = QOnSurface,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -598,13 +603,13 @@ fun ServerChipsSection(
                         Icon(
                             imageVector = Icons.Default.Dns,
                             contentDescription = null,
-                            tint = if (isActive) QOnYellow else Color.White,
+                            tint = if (isActive) QOnYellow else QOnSurface,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = src.label,
-                            color = if (isActive) QOnYellow else Color.White,
+                            color = if (isActive) QOnYellow else QOnSurface,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -651,7 +656,7 @@ fun SeasonSelectorRow(
                     selectedContainerColor = QYellowPrimary,
                     selectedLabelColor = QOnYellow,
                     containerColor = QSurface,
-                    labelColor = Color.White
+                    labelColor = QOnSurface
                 )
             )
         }
@@ -661,6 +666,7 @@ fun SeasonSelectorRow(
 @Composable
 fun EpisodeListItem(
     episode: Episode,
+    series: Series?,
     isCurrentlyPlaying: Boolean,
     onSelectEpisode: () -> Unit
 ) {
@@ -672,38 +678,14 @@ fun EpisodeListItem(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Thumbnail Container
-        Box(
-            modifier = Modifier
-                .width(100.dp)
-                .height(58.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.DarkGray)
-        ) {
-            if (!episode.thumbnailUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = episode.thumbnailUrl,
-                    contentDescription = episode.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            if (isCurrentlyPlaying) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.6f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Playing",
-                        tint = QYellowPrimary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
-        }
+        // Thumbnail Container with fallback & badges
+        EpisodeThumbnail(
+            episode = episode,
+            series = series,
+            modifier = Modifier.width(112.dp),
+            showBadges = true,
+            isPlaying = isCurrentlyPlaying
+        )
 
         Spacer(modifier = Modifier.width(12.dp))
 
@@ -717,7 +699,7 @@ fun EpisodeListItem(
             )
             Text(
                 text = episode.title ?: "Episode ${episode.episodeNumber}",
-                color = Color.White,
+                color = QOnSurface,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -767,7 +749,7 @@ fun CommentInputBox(
                     onClick = onCancelReplyOrEdit,
                     modifier = Modifier.size(20.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel", tint = Color.White)
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel", tint = QOnSurfaceVariant)
                 }
             }
         }
@@ -782,9 +764,9 @@ fun CommentInputBox(
                 placeholder = { Text("Add a comment...", fontSize = 13.sp) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = QYellowPrimary,
-                    unfocusedBorderColor = Color.Gray,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    unfocusedBorderColor = QCardBorder,
+                    focusedTextColor = QOnSurface,
+                    unfocusedTextColor = QOnSurface
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -856,7 +838,7 @@ fun CommentItemRow(
                     val userLabel = if (comment.userId.length >= 8) comment.userId.take(8) else comment.userId
                     Text(
                         text = userLabel,
-                        color = Color.White,
+                        color = QOnSurface,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )

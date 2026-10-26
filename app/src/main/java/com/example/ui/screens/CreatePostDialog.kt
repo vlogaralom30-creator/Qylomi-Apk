@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.components.ImgBbUrlInputField
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -50,7 +51,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -132,6 +136,8 @@ fun CreatePostBottomSheet(
     var currentTab by remember { mutableStateOf(PostModeTab.VIDEO) }
     var isPublishing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
 
     // Video Post Form State
     var videoTitle by remember { mutableStateOf("") }
@@ -230,35 +236,63 @@ fun CreatePostBottomSheet(
                                     isPublishing = false
                                     return@Button
                                 }
-                                val extracted = lastExtractedResult
-                                val parsed = VideoEmbedUtils.parseVideoUrl(videoUrl)
-                                val finalEmbed = extracted?.embedUrl ?: parsed.embedUrl
-                                val finalDirect = extracted?.directVideoUrl
-                                val finalPlatform = extracted?.platform ?: parsed.platform
-                                val finalThumb = videoThumbnailUrl.ifBlank { extracted?.thumbnailUrl }
-                                val duration = extracted?.durationSeconds
-                                val width = extracted?.width
-                                val height = extracted?.height
-                                val isVertical = extracted?.isVertical ?: (parsed.platform == "tiktok")
 
-                                onPublishVideo(
-                                    videoTitle.ifBlank { extracted?.title },
-                                    videoUrl.trim(),
-                                    finalEmbed,
-                                    finalDirect,
-                                    finalPlatform,
-                                    finalThumb,
-                                    duration,
-                                    width,
-                                    height,
-                                    isVertical,
-                                    videoCategory,
-                                    parsedTags
-                                ) { success, err ->
-                                    isPublishing = false
-                                    if (success) onDismiss() else errorMessage = err ?: "Failed to post video"
+                                scope.launch {
+                                    var extracted = lastExtractedResult
+
+                                    if (extracted == null) {
+                                        try {
+                                            val handler = com.example.video.VideoPlatformRegistry.resolve(videoUrl.trim())
+                                            val parsedVideo = handler.parse(videoUrl.trim()) ?: com.example.video.ParsedVideo(handler.platformId, videoUrl.trim())
+                                            val res = handler.extract(parsedVideo).getOrNull()
+                                            if (res != null) {
+                                                extracted = ExtractedVideoResult(
+                                                    platform = res.platform,
+                                                    platformDisplayName = handler.displayName,
+                                                    originalUrl = res.originalUrl,
+                                                    directVideoUrl = res.directUrl,
+                                                    embedUrl = res.embedUrl,
+                                                    title = res.title,
+                                                    thumbnailUrl = res.thumbnailUrl,
+                                                    authorName = res.authorName,
+                                                    isDirectPlayable = res.isNativePlayable,
+                                                    durationSeconds = res.durationSec,
+                                                    isVertical = res.isVertical
+                                                )
+                                            }
+                                        } catch (_: Exception) {}
+                                    }
+
+                                    val parsed = VideoEmbedUtils.parseVideoUrl(videoUrl)
+                                    val finalEmbed = extracted?.embedUrl ?: parsed.embedUrl
+                                    val finalDirect = extracted?.directVideoUrl
+                                    val finalPlatform = extracted?.platform ?: parsed.platform
+                                    val finalThumb = videoThumbnailUrl.ifBlank { extracted?.thumbnailUrl }
+                                    val duration = extracted?.durationSeconds
+                                    val width = extracted?.width
+                                    val height = extracted?.height
+                                    val isVertical = extracted?.isVertical ?: (parsed.platform == "tiktok")
+
+                                    onPublishVideo(
+                                        videoTitle.ifBlank { extracted?.title },
+                                        videoUrl.trim(),
+                                        finalEmbed,
+                                        finalDirect,
+                                        finalPlatform,
+                                        finalThumb,
+                                        duration,
+                                        width,
+                                        height,
+                                        isVertical,
+                                        videoCategory,
+                                        parsedTags
+                                    ) { success, err ->
+                                        isPublishing = false
+                                        if (success) onDismiss() else errorMessage = err ?: "Failed to post video"
+                                    }
                                 }
                             }
+
                             PostModeTab.PHOTO -> {
                                 if (photoUrlsList.isEmpty()) {
                                     errorMessage = "Please add at least 1 photo URL"
@@ -353,13 +387,15 @@ fun CreatePostBottomSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Mode Selector Tabs (Video / Photo / Text / General)
+            // Mode Selector Tabs (Scrollable Segmented Pills)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .clip(RoundedCornerShape(12.dp))
                     .background(QSurfaceVariant)
-                    .padding(4.dp)
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 PostModeTab.values().forEach { tab ->
                     val isSelected = currentTab == tab
@@ -374,14 +410,13 @@ fun CreatePostBottomSheet(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) QYellowPrimary else Color.Transparent)
                             .clickable {
                                 currentTab = tab
                                 errorMessage = null
                             }
-                            .padding(vertical = 8.dp)
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
                             .testTag("tab_${tab.name.lowercase()}")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -389,12 +424,12 @@ fun CreatePostBottomSheet(
                                 imageVector = icon,
                                 contentDescription = label,
                                 tint = if (isSelected) QOnYellow else QOnSurfaceVariant,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = label,
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) QOnYellow else QOnSurfaceVariant
                             )
@@ -693,17 +728,13 @@ fun CreatePostBottomSheet(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        OutlinedTextField(
+                        ImgBbUrlInputField(
                             value = videoThumbnailUrl,
                             onValueChange = { videoThumbnailUrl = it },
-                            label = { Text("Custom Cover Thumbnail URL (optional)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = QYellowPrimary,
-                                unfocusedBorderColor = QCardBorder
-                            )
+                            label = "Custom Cover Thumbnail URL (optional)",
+                            placeholder = "https://i.ibb.co/...",
+                            previewAspectRatio = 16f / 9f,
+                            testTag = "input_video_cover_url"
                         )
                     }
                 }
@@ -735,18 +766,13 @@ fun CreatePostBottomSheet(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            OutlinedTextField(
+                            ImgBbUrlInputField(
                                 value = newPhotoInput,
                                 onValueChange = { newPhotoInput = it },
-                                label = { Text("Image URL") },
-                                placeholder = { Text("https://example.com/photo.jpg") },
-                                singleLine = true,
+                                label = "Image URL",
+                                placeholder = "https://i.ibb.co/...",
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = QYellowPrimary,
-                                    unfocusedBorderColor = QCardBorder
-                                )
+                                testTag = "input_photo_url"
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
@@ -762,7 +788,7 @@ fun CreatePostBottomSheet(
                                     containerColor = QYellowPrimary,
                                     contentColor = QOnYellow
                                 ),
-                                modifier = Modifier.height(54.dp)
+                                modifier = Modifier.padding(top = 8.dp).height(54.dp)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = "Add Photo")
                             }

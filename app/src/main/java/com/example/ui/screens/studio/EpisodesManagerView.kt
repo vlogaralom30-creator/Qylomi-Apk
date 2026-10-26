@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.*
+import com.example.ui.components.EpisodeThumbnail
+import com.example.ui.components.ImgBbUrlInputField
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.CreatorStudioViewModel
 
@@ -168,6 +170,7 @@ fun EpisodesManagerView(
                 items(currentSeasonEpisodes, key = { it.id }) { ep ->
                     EpisodeRowCard(
                         episode = ep,
+                        series = series,
                         onEdit = { onEditEpisode(ep) },
                         onDelete = { onDeleteEpisode(ep) }
                     )
@@ -209,6 +212,7 @@ fun EpisodesManagerView(
 @Composable
 private fun EpisodeRowCard(
     episode: Episode,
+    series: Series,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -224,16 +228,12 @@ private fun EpisodeRowCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Thumbnail
-            AsyncImage(
-                model = episode.thumbnailUrl,
-                contentDescription = episode.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(80.dp)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(QSurfaceVariant)
+            // Episode Thumbnail with fallback chain
+            EpisodeThumbnail(
+                episode = episode,
+                series = series,
+                modifier = Modifier.width(88.dp),
+                showBadges = true
             )
 
             Column(modifier = Modifier.weight(1f)) {
@@ -241,7 +241,7 @@ private fun EpisodeRowCard(
                     text = "E${episode.episodeNumber}: ${episode.title ?: "Untitled Episode"}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = Color.White,
+                    color = QOnSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -371,23 +371,36 @@ fun EpisodeFormView(
             modifier = Modifier.fillMaxWidth()
         )
 
-        OutlinedTextField(
+        ImgBbUrlInputField(
             value = thumbnailUrl,
             onValueChange = { thumbnailUrl = it },
-            label = { Text("Thumbnail URL (16:9)") },
-            modifier = Modifier.fillMaxWidth()
+            label = "Thumbnail URL (16:9)",
+            previewAspectRatio = 16f / 9f,
+            testTag = "input_episode_thumbnail_url"
         )
-        if (thumbnailUrl.isNotBlank()) {
-            AsyncImage(
-                model = thumbnailUrl,
-                contentDescription = "Thumbnail Preview",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(140.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(QSurfaceVariant)
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val seriesPoster = series.posterUrl ?: series.bannerUrl
+            if (!seriesPoster.isNullOrBlank()) {
+                OutlinedButton(
+                    onClick = { thumbnailUrl = seriesPoster },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Use series poster", fontSize = 12.sp)
+                }
+            }
+            if (thumbnailUrl.isNotBlank()) {
+                OutlinedButton(
+                    onClick = { thumbnailUrl = "" },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Clear (Use fallback)", fontSize = 12.sp)
+                }
+            }
         }
 
         Row(

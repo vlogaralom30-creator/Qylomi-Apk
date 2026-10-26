@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -92,7 +93,9 @@ fun FeedScreen(
     onGroupsClick: () -> Unit = {},
     onOpenReels: ((Post) -> Unit)? = null,
     onOpenMenu: ((Post) -> Unit)? = null,
-    onLikersClick: ((Post) -> Unit)? = null
+    onLikersClick: ((Post) -> Unit)? = null,
+    feedError: String? = null,
+    onRetryFeed: () -> Unit = onRefresh
 ) {
     var storyPreviewProfile by remember { mutableStateOf<UserProfile?>(null) }
 
@@ -238,6 +241,67 @@ fun FeedScreen(
                             .padding(40.dp)
                     ) {
                         CircularProgressIndicator(color = QYellowPrimary)
+                    }
+                }
+            } else if (feedError != null && filteredPosts.isEmpty()) {
+                // Error state
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = QSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(32.dp))
+                                    .background(androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.15f))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = androidx.compose.ui.graphics.Color.Red,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Unable to load feed",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                color = QOnSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = feedError,
+                                fontSize = 13.sp,
+                                color = QOnSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Button(
+                                onClick = onRetryFeed,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Retry", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             } else if (filteredPosts.isEmpty()) {

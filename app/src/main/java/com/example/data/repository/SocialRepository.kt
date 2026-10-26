@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.data.api.SupabaseClient
+import com.example.data.api.SessionManager
 import com.example.data.model.AuthResponse
 import com.example.data.model.Comment
 import com.example.data.model.CreateCommentRequest
@@ -38,7 +39,7 @@ import java.util.Locale
 import java.util.UUID
 
 class SocialRepository(
-    context: Context,
+    private val context: Context,
     private val service: SupabaseService = SupabaseService.getInstance()
 ) {
 
@@ -227,7 +228,12 @@ class SocialRepository(
                     )
                     _currentUser.value = profile
                     _isLoggedIn.value = true
-                    saveUserSession(profile, token)
+                    
+                    val session = body.toSession()
+                    if (session != null) {
+                        SessionManager.getInstance(context).saveSession(session.copy(userId = profile.id, email = email))
+                    }
+                    
                     saveAccountCredential(
                         email = email,
                         pass = pass,
@@ -274,7 +280,12 @@ class SocialRepository(
 
                     _currentUser.value = newProfile
                     _isLoggedIn.value = true
-                    saveUserSession(newProfile, token)
+                    
+                    val session = body.toSession()
+                    if (session != null) {
+                        SessionManager.getInstance(context).saveSession(session.copy(userId = newProfile.id, email = email))
+                    }
+                    
                     saveAccountCredential(
                         email = email,
                         pass = pass,

@@ -53,6 +53,9 @@ data class UserProfile(
             .map { it.first().uppercaseChar() }
             .joinToString("")
             .ifEmpty { "Q" }
+
+    val isProfileComplete: Boolean
+        get() = !avatarUrl.isNullOrBlank() && !bio.isNullOrBlank()
 }
 
 @JsonClass(generateAdapter = true)

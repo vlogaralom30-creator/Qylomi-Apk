@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.components.ImgBbUrlInputField
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -231,36 +232,24 @@ fun EditProfileScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    OutlinedTextField(
+                    ImgBbUrlInputField(
                         value = avatarUrl,
                         onValueChange = { avatarUrl = it },
-                        label = { Text("Avatar Image URL") },
-                        placeholder = { Text("https://example.com/photo.jpg") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_avatar_url"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = QYellowPrimary
-                        )
+                        label = "Avatar Image URL",
+                        placeholder = "https://i.ibb.co/...",
+                        previewAspectRatio = 1f,
+                        testTag = "input_avatar_url"
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
+                    ImgBbUrlInputField(
                         value = coverUrl,
                         onValueChange = { coverUrl = it },
-                        label = { Text("Cover Banner Image URL") },
-                        placeholder = { Text("https://example.com/banner.jpg") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_cover_url"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = QYellowPrimary
-                        )
+                        label = "Cover Banner Image URL",
+                        placeholder = "https://i.ibb.co/...",
+                        previewAspectRatio = 16f / 9f,
+                        testTag = "input_cover_url"
                     )
                 }
             }

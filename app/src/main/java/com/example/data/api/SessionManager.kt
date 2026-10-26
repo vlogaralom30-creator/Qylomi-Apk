@@ -228,10 +228,9 @@ class SessionManager private constructor(context: Context) {
                     currentSession = refreshed
                 }
             }
-            // Always set current session token, overriding any stale userToken parameter
             requestBuilder.header("Authorization", "Bearer ${currentSession.accessToken}")
         } else {
-            // Guest mode: only set if caller didn't provide something specific (like a different service key)
+            // Guest mode
             if (original.header("Authorization").isNullOrBlank()) {
                 requestBuilder.header("Authorization", "Bearer ${SupabaseClient.activeKey}")
             }

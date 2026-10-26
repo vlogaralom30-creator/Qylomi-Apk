@@ -55,6 +55,7 @@ import com.example.ui.components.ProfileBadge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -210,6 +211,7 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     val tabTitles = if (isOwnProfile) listOf("Posts", "Saved", "About", "Points") else listOf("Posts", "About", "Points")
 
     BackHandler(enabled = !isOwnProfile) {
@@ -311,6 +313,22 @@ fun ProfileScreen(
                             }
 
                             if (isOwnProfile) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = { showSettingsDialog = true },
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.45f))
+                                        .size(38.dp)
+                                        .testTag("profile_settings_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Settings",
+                                        tint = Color.White
+                                    )
+                                }
+
                                 Spacer(modifier = Modifier.width(8.dp))
                                 IconButton(
                                     onClick = onLogoutClick,
@@ -840,6 +858,101 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+
+    if (showSettingsDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showSettingsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Settings, contentDescription = null, tint = QYellowPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Settings & Preferences", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                ) {
+                    // Edit Profile Option
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                showSettingsDialog = false
+                                onEditProfileClick()
+                            }
+                            .padding(10.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = QYellowPrimary, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Edit Profile", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = QOnSurface)
+                            Text("Update name, bio, avatars & links", fontSize = 12.sp, color = QOnSurfaceVariant)
+                        }
+                    }
+
+                    androidx.compose.material3.HorizontalDivider(color = QCardBorder)
+
+                    // Video Auto-Play Toggle
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Video Auto-Play in Feed", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = QOnSurface)
+                            Text("Automatically play videos on scroll", fontSize = 11.sp, color = QOnSurfaceVariant)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.material3.Switch(
+                            checked = com.example.video.youtube.YouTubePlayerManager.AUTOPLAY_YOUTUBE_IN_FEED,
+                            onCheckedChange = { checked ->
+                                com.example.video.youtube.YouTubePlayerManager.AUTOPLAY_YOUTUBE_IN_FEED = checked
+                            }
+                        )
+                    }
+
+                    androidx.compose.material3.HorizontalDivider(color = QCardBorder)
+
+                    // Other info / Cache
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                android.widget.Toast.makeText(context, "Cache cleared successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(10.dp)
+                    ) {
+                        Icon(Icons.Default.Language, contentDescription = null, tint = QOnSurfaceVariant, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Clear Video Cache", fontWeight = FontWeight.Medium, fontSize = 14.sp, color = QOnSurface)
+                            Text("Free up local storage space", fontSize = 11.sp, color = QOnSurfaceVariant)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showSettingsDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Done", fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = QSurface,
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 }
 }

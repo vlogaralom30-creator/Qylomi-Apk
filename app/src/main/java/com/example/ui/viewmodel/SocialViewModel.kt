@@ -36,6 +36,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     private val _isFeedLoading = MutableStateFlow(false)
     val isFeedLoading: StateFlow<Boolean> = _isFeedLoading.asStateFlow()
 
+    private val _feedError = MutableStateFlow<String?>(null)
+    val feedError: StateFlow<String?> = _feedError.asStateFlow()
+
     private val _isFeedRefreshing = MutableStateFlow(false)
     val isFeedRefreshing: StateFlow<Boolean> = _isFeedRefreshing.asStateFlow()
 
@@ -152,6 +155,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
             val res = repository.getFeedPosts()
             res.onSuccess { list ->
                 _feedPosts.value = list
+                _feedError.value = null
+            }.onFailure { err ->
+                _feedError.value = err.localizedMessage ?: "Failed to load posts"
             }
             _isFeedLoading.value = false
         }
@@ -163,6 +169,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
             val res = repository.getFeedPosts()
             res.onSuccess { list ->
                 _feedPosts.value = list
+                _feedError.value = null
+            }.onFailure { err ->
+                _feedError.value = err.localizedMessage ?: "Failed to load posts"
             }
             loadSavedPosts()
             _isFeedRefreshing.value = false

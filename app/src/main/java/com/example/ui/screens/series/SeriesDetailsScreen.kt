@@ -35,7 +35,8 @@ import coil.compose.AsyncImage
 import com.example.data.model.Episode
 import com.example.data.model.Season
 import com.example.data.model.Series
-import com.example.data.model.SeriesCard
+import com.example.ui.components.EpisodeThumbnail
+import com.example.ui.components.NumberedEpisodeGrid
 import com.example.ui.components.SeriesCardItem
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.SeriesViewModel
@@ -595,14 +596,15 @@ fun SeriesDetailsScreen(
                         }
                     }
                 } else {
-                    items(episodesForSeason, key = { it.id }) { ep ->
-                        EpisodeCardItem(
-                            episode = ep,
-                            onClick = { onPlayEpisode(s.id, ep.id) },
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    item {
+                        NumberedEpisodeGrid(
+                            episodes = episodesForSeason,
+                            onEpisodeClick = { ep -> onPlayEpisode(s.id, ep.id) },
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
                 }
+
 
                 // 4. More Like This Row (get_related_series)
                 if (relatedSeries.isNotEmpty()) {
@@ -741,11 +743,12 @@ fun SeriesDetailsScreen(
 @Composable
 private fun EpisodeCardItem(
     episode: Episode,
+    series: Series?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = QSurface),
         border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
         modifier = modifier
@@ -757,38 +760,13 @@ private fun EpisodeCardItem(
             modifier = Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Episode Thumbnail (16:9)
-            Box(
-                modifier = Modifier
-                    .width(110.dp)
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(QSurfaceVariant)
-            ) {
-                if (!episode.thumbnailUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = episode.thumbnailUrl,
-                        contentDescription = episode.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .align(Alignment.Center)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = QYellowPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
+            // Episode Thumbnail (16:9 with fallback chain & badges)
+            EpisodeThumbnail(
+                episode = episode,
+                series = series,
+                modifier = Modifier.width(116.dp),
+                showBadges = true
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 

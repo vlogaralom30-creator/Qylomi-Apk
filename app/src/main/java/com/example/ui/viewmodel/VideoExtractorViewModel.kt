@@ -67,9 +67,12 @@ sealed interface VideoExtractionState {
 object TikTokProviderConfig {
     const val PRIMARY_API_BASE = "https://www.tikwm.com/api/"
     val FALLBACK_API_BASES = listOf(
-        "https://api.tikwm.com/api/"
+        "https://api.tikwm.com/api/",
+        "https://tikwm.com/api/",
+        "https://api2.tikwm.com/api/"
     )
 }
+
 
 object DirectVideoCache {
     private val cache = ConcurrentHashMap<String, Pair<String, Long>>()

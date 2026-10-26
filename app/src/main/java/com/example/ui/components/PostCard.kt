@@ -43,6 +43,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.example.util.MediaParser
@@ -104,19 +105,16 @@ fun PostCard(
     var showMenu by remember { mutableStateOf(false) }
     val isOwner = currentUserId != null && currentUserId == post.userId
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = QSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, QCardBorder, RoundedCornerShape(16.dp))
+            .background(QSurface)
             .testTag("post_card_${post.id}")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             // Author row
             Row(
@@ -697,6 +695,10 @@ fun PostCard(
                 }
             }
         }
+        HorizontalDivider(
+            color = QCardBorder.copy(alpha = 0.5f),
+            thickness = 1.dp
+        )
     }
 }
 

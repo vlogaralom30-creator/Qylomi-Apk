@@ -1,5 +1,8 @@
 package com.example.video.youtube
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,9 +14,9 @@ import kotlinx.coroutines.flow.asStateFlow
 object YouTubePlayerManager {
     /**
      * Whether YouTube videos in the feed should auto-play when visible.
-     * Default is false (click-to-play) per specification.
+     * Toggled via Settings.
      */
-    const val AUTOPLAY_YOUTUBE_IN_FEED: Boolean = false
+    var AUTOPLAY_YOUTUBE_IN_FEED: Boolean by mutableStateOf(false)
 
     private val _activePlayerId = MutableStateFlow<String?>(null)
     val activePlayerId: StateFlow<String?> = _activePlayerId.asStateFlow()

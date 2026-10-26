@@ -35,7 +35,7 @@ object MediaResolver {
     private val backgroundSemaphore = Semaphore(2)
 
     val defaultTikTokHeaders = mapOf(
-        "Referer" to "https://www.tiktok.com/",
+        "Referer" to "https://www.tikwm.com/",
         "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     )
 
@@ -148,18 +148,22 @@ object MediaResolver {
             try {
                 return withTimeout(TIMEOUT_MS) {
                     val extracted = VideoPlatformRegistry.extract(key.url).getOrThrow()
-                    val directUrl = extracted.directUrl ?: extracted.embedUrl
+                    val rawDirect = extracted.directUrl
+                    val isDirect = !rawDirect.isNullOrBlank() && !rawDirect.contains("tiktok.com/embed") && !rawDirect.contains("/embed/")
+                    val effectiveUrl = if (isDirect) rawDirect!! else (extracted.embedUrl ?: key.url)
                     val now = System.currentTimeMillis()
-                    val expiresAt = ExpiryParser.calculateExpiryMs(directUrl, now)
+                    val expiresAt = ExpiryParser.calculateExpiryMs(effectiveUrl, now)
 
                     val resolved = ResolvedMedia(
-                        url = directUrl,
+                        url = effectiveUrl,
                         headers = if (key.platform == "tiktok") defaultTikTokHeaders else (extracted.requestHeaders ?: emptyMap()),
                         resolvedAtMs = now,
                         expiresAtMs = expiresAt,
-                        isHls = directUrl.contains(".m3u8", ignoreCase = true),
+                        isHls = effectiveUrl.contains(".m3u8", ignoreCase = true),
                         thumbnailUrl = extracted.thumbnailUrl,
-                        durationMs = extracted.durationSec?.let { it * 1000L }
+                        durationMs = extracted.durationSec?.let { it * 1000L },
+                        isDirectPlayable = isDirect,
+                        embedUrl = extracted.embedUrl
                     )
 
                     val elapsed = System.currentTimeMillis() - startTime

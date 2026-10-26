@@ -15,7 +15,9 @@ data class ResolvedMedia(
     val expiresAtMs: Long,
     val isHls: Boolean = false,
     val thumbnailUrl: String? = null,
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    val isDirectPlayable: Boolean = true,
+    val embedUrl: String? = null
 ) {
     fun isStale(nowMs: Long = System.currentTimeMillis()): Boolean {
         // Treat entry as stale 2 minutes (120,000 ms) before actual expiry
@@ -28,6 +30,7 @@ sealed class MediaResolveState {
     object Resolving : MediaResolveState()
     data class Ready(val media: ResolvedMedia) : MediaResolveState()
     object Recovering : MediaResolveState()
+    data class Fallback(val video: com.example.video.ExtractedVideo) : MediaResolveState()
     data class Failed(val message: String, val rawError: String? = null) : MediaResolveState()
 }
 

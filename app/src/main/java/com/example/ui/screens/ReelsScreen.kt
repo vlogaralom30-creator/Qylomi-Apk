@@ -83,9 +83,40 @@ import com.example.ui.theme.QLikeRed
 import com.example.ui.theme.QOnYellow
 import com.example.ui.theme.QVerifiedBlue
 import com.example.ui.theme.QYellowPrimary
+import android.util.Log
+import android.view.ViewGroup
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.viewinterop.AndroidView
+import coil.compose.AsyncImage
+import com.example.player.resolver.MediaKey
+import com.example.player.resolver.MediaResolver
+import com.example.ui.theme.QCardBorder
+import com.example.ui.theme.QOnSurface
+import com.example.ui.theme.QOnSurfaceVariant
+import com.example.ui.theme.QSurface
+import com.example.video.VideoPlatformRegistry
+import com.example.ui.viewmodel.DirectVideoCache
 import com.example.ui.viewmodel.ReelsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+enum class ReelPlaybackMode {
+    RESOLVING,
+    NATIVE,
+    EMBED,
+    FAILED
+}
 
 @Composable
 fun ReelsScreen(
@@ -100,6 +131,7 @@ fun ReelsScreen(
     viewModel: ReelsViewModel = viewModel()
 ) {
     BackHandler { onBack() }
+    val coroutineScope = rememberCoroutineScope()
 
     val reels by viewModel.reels.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -217,6 +249,13 @@ fun ReelsScreen(
                             type = "text/plain"
                         }
                         context.startActivity(Intent.createChooser(sendIntent, "Share Reel"))
+                    },
+                    onSkipToNext = {
+                        if (page < reels.size - 1) {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(page + 1)
+                            }
+                        }
                     }
                 )
             }
@@ -269,7 +308,8 @@ fun ReelPageItem(
     onAuthorClick: () -> Unit,
     onToggleFollow: () -> Unit,
     isFollowing: Boolean,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onSkipToNext: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isUserPaused by remember { mutableStateOf(false) }
@@ -286,13 +326,137 @@ fun ReelPageItem(
     )
 
     val videoDetails = reel.videoDetails
-    val directUrl = videoDetails?.directUrl?.takeIf { it.isNotBlank() }
-    val videoUrl = directUrl ?: videoDetails?.videoUrl ?: reel.externalUrl ?: ""
+    val sourceUrl = videoDetails?.videoUrl?.takeIf { it.isNotBlank() }
+        ?: reel.externalUrl?.takeIf { it.isNotBlank() }
+        ?: videoDetails?.directUrl
+        ?: ""
 
-    // When page changes, reset user pause state
-    LaunchedEffect(isCurrentPage) {
+    val storedDirect = videoDetails?.directUrl?.takeIf {
+        it.isNotBlank() && !it.contains("tiktok.com/embed") && !it.contains("/embed/")
+    } ?: DirectVideoCache.get(sourceUrl)
+
+    val extractionUrl = videoDetails?.videoUrl?.takeIf { it.isNotBlank() && !it.endsWith(".mp4") }
+        ?: reel.externalUrl?.takeIf { it.isNotBlank() && !it.endsWith(".mp4") }
+        ?: sourceUrl
+
+    val isTikTok = remember(sourceUrl, extractionUrl) {
+        val lower1 = sourceUrl.lowercase()
+        val lower2 = extractionUrl.lowercase()
+        val lower3 = (videoDetails?.directUrl ?: "").lowercase()
+        lower1.contains("tiktok.com") || lower1.contains("tikwm.com") || lower1.contains("tiklink") ||
+                lower2.contains("tiktok.com") || lower2.contains("tikwm.com") || lower2.contains("tiklink") ||
+                lower3.contains("tiktok.com") || lower3.contains("tikwm.com") || lower3.contains("tiktokcdn")
+    }
+    val isDrive = remember(sourceUrl) {
+        val lower = sourceUrl.lowercase()
+        lower.contains("drive.google.com") || lower.contains("docs.google.com")
+    }
+
+    var playbackMode by remember(reel.id) {
+        mutableStateOf(if (isTikTok || isDrive) ReelPlaybackMode.RESOLVING else ReelPlaybackMode.NATIVE)
+    }
+    var activePlayUrl by remember(reel.id) {
+        mutableStateOf(storedDirect ?: sourceUrl)
+    }
+    var activeHeaders by remember(reel.id) {
+        mutableStateOf<Map<String, String>>(if (isTikTok) MediaResolver.defaultTikTokHeaders else emptyMap())
+    }
+    var hasRecoveredOnce by remember(reel.id) { mutableStateOf(false) }
+    var retryCount by remember(reel.id) { mutableIntStateOf(0) }
+    var skipCountdown by remember(reel.id) { mutableIntStateOf(3) }
+    val coverThumbnail = videoDetails?.thumbnailUrl
+
+    // Resolve on page active or retry
+    LaunchedEffect(isCurrentPage, reel.id, retryCount) {
         if (!isCurrentPage) {
             isUserPaused = false
+            return@LaunchedEffect
+        }
+
+        if (isTikTok || isDrive) {
+            playbackMode = ReelPlaybackMode.RESOLVING
+            val mediaKey = MediaKey(
+                url = extractionUrl,
+                platform = if (isTikTok) "tiktok" else if (isDrive) "gdrive" else "direct"
+            )
+            val force = retryCount > 0
+
+            try {
+                val resolved = MediaResolver.resolve(mediaKey, force = force, isHighPriority = true)
+                if (resolved.isDirectPlayable && resolved.url.isNotBlank()) {
+                    activePlayUrl = resolved.url
+                    activeHeaders = resolved.headers
+                    playbackMode = ReelPlaybackMode.NATIVE
+                } else if (storedDirect != null && storedDirect.isNotBlank()) {
+                    activePlayUrl = storedDirect
+                    if (isTikTok) activeHeaders = MediaResolver.defaultTikTokHeaders
+                    playbackMode = ReelPlaybackMode.NATIVE
+                } else {
+                    activePlayUrl = resolved.embedUrl ?: resolved.url
+                    playbackMode = ReelPlaybackMode.EMBED
+                }
+            } catch (e: Exception) {
+                if (storedDirect != null && storedDirect.isNotBlank()) {
+                    activePlayUrl = storedDirect
+                    if (isTikTok) activeHeaders = MediaResolver.defaultTikTokHeaders
+                    playbackMode = ReelPlaybackMode.NATIVE
+                } else {
+                    val embed = videoDetails?.embedUrl ?: sourceUrl
+                    activePlayUrl = embed
+                    playbackMode = ReelPlaybackMode.EMBED
+                }
+            }
+        } else {
+            activePlayUrl = storedDirect ?: sourceUrl
+            playbackMode = ReelPlaybackMode.NATIVE
+        }
+    }
+
+
+    // Auto-skip timer when FAILED
+    LaunchedEffect(playbackMode, reel.id) {
+        if (playbackMode == ReelPlaybackMode.FAILED) {
+            skipCountdown = 3
+            while (skipCountdown > 0) {
+                delay(1000)
+                skipCountdown--
+            }
+            onSkipToNext()
+        }
+    }
+
+    val handleNativePlaybackError: (String) -> Unit = { err ->
+        Log.e("REELS_TT", "Playback error in NativeVideoPlayer: $err, url: $activePlayUrl, hasRecoveredOnce: $hasRecoveredOnce")
+        if (!hasRecoveredOnce) {
+            hasRecoveredOnce = true
+            coroutineScope.launch {
+                Log.d("REELS_TT", "Starting single automatic recovery for reel ${reel.id}")
+                val mediaKey = MediaKey(
+                    url = extractionUrl,
+                    platform = if (isTikTok) "tiktok" else if (isDrive) "gdrive" else "direct"
+                )
+                try {
+                    val resolved = MediaResolver.resolve(mediaKey, force = true, isHighPriority = true)
+                    if (resolved.isDirectPlayable && resolved.url.isNotBlank() && resolved.url != activePlayUrl) {
+                        Log.d("REELS_TT", "Auto-recovery obtained fresh directUrl: ${resolved.url}")
+                        activePlayUrl = resolved.url
+                        activeHeaders = resolved.headers
+                        playbackMode = ReelPlaybackMode.NATIVE
+                    } else {
+                        Log.w("REELS_TT", "Auto-recovery failed or non-playable, falling back to EMBED WebView")
+                        activePlayUrl = resolved.embedUrl ?: videoDetails?.embedUrl ?: sourceUrl
+                        playbackMode = ReelPlaybackMode.EMBED
+                    }
+                } catch (e: Exception) {
+                    Log.e("REELS_TT", "Auto-recovery exception: ${e.message}, falling back to EMBED WebView")
+                    activePlayUrl = videoDetails?.embedUrl ?: sourceUrl
+                    playbackMode = ReelPlaybackMode.EMBED
+                }
+            }
+        } else {
+            Log.w("REELS_TT", "Already attempted recovery once. Falling back to EMBED WebView.")
+            activePlayUrl = videoDetails?.embedUrl ?: sourceUrl
+            playbackMode = ReelPlaybackMode.EMBED
         }
     }
 
@@ -325,38 +489,168 @@ fun ReelPageItem(
             }
     ) {
         // Main Video Stage
-        val handler = remember(videoUrl) { com.example.video.VideoPlatformRegistry.resolve(videoUrl) }
-        val extractedVideo = remember(reel, videoUrl) {
-            com.example.video.ExtractedVideo(
-                platform = handler.platformId,
-                videoId = reel.videoDetails?.externalId ?: handler.parse(videoUrl)?.videoId,
-                originalUrl = videoUrl,
-                embedUrl = reel.videoDetails?.embedUrl ?: videoUrl,
-                directUrl = directUrl,
-                thumbnailUrl = reel.videoDetails?.thumbnailUrl,
-                title = reel.videoDetails?.title ?: reel.title,
-                isVertical = true,
-                isNativePlayable = directUrl != null,
-                requestHeaders = if (handler.platformId == "gdrive") {
-                    // We need to rebuild headers here if it's Drive and not yet extracted
-                    // But usually Reels are extracted or have directUrl
-                    null 
-                } else null
-            )
-        }
+        when (playbackMode) {
+            ReelPlaybackMode.RESOLVING -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!coverThumbnail.isNullOrBlank()) {
+                        AsyncImage(
+                            model = coverThumbnail,
+                            contentDescription = "Cover",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    CircularProgressIndicator(
+                        color = QYellowPrimary,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
+            }
 
-        handler.Player(
-            video = extractedVideo,
-            modifier = Modifier.fillMaxSize(),
-            config = com.example.video.PlayerConfig(
-                autoPlay = isCurrentPage && !isUserPaused,
-                muted = isMuted,
-                loop = true,
-                showControls = false,
-                nativeOnly = handler.platformId == "gdrive"
-            ),
-            controller = null
-        )
+            ReelPlaybackMode.NATIVE -> {
+                NativeVideoPlayer(
+                    url = activePlayUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    autoPlay = isCurrentPage && !isUserPaused,
+                    loop = true,
+                    muted = isMuted,
+                    isVertical = true,
+                    aspectRatio = 0f,
+                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+                    showControls = false,
+                    requestHeaders = activeHeaders,
+                    thumbnailUrl = coverThumbnail,
+                    onError = handleNativePlaybackError
+                )
+            }
+
+            ReelPlaybackMode.EMBED -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                settings.mediaPlaybackRequiresUserGesture = false
+                                settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+                                webChromeClient = WebChromeClient()
+                                webViewClient = object : WebViewClient() {
+                                    override fun onReceivedError(
+                                        view: WebView?,
+                                        errorCode: Int,
+                                        description: String?,
+                                        failingUrl: String?
+                                    ) {
+                                        Log.e("REELS_TT", "Embed fallback error: $description")
+                                        playbackMode = ReelPlaybackMode.FAILED
+                                    }
+                                }
+                                val embedUrl = if (isTikTok) {
+                                    val id = VideoPlatformRegistry.resolve(sourceUrl).parse(sourceUrl)?.videoId
+                                    if (id != null) "https://www.tiktok.com/embed/v2/$id" else activePlayUrl
+                                } else {
+                                    activePlayUrl
+                                }
+                                val html = """
+                                    <!DOCTYPE html>
+                                    <html>
+                                    <head>
+                                        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+                                        <style>
+                                            body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: black; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+                                            iframe, video { width: 100%; height: 100%; border: none; }
+                                        </style>
+                                    </head>
+                                    <body>
+                                        <iframe src="$embedUrl" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                                    </body>
+                                    </html>
+                                """.trimIndent()
+                                loadDataWithBaseURL("https://www.tiktok.com", html, "text/html", "UTF-8", null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            ReelPlaybackMode.FAILED -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = QSurface),
+                        border = BorderStroke(1.dp, QCardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .padding(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color.Red,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Video Playback Error",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = QOnSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Could not load video source.",
+                                fontSize = 13.sp,
+                                color = QOnSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = {
+                                    hasRecoveredOnce = false
+                                    retryCount++
+                                    playbackMode = ReelPlaybackMode.RESOLVING
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow
+                                )
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Retry", fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Auto-skipping in ${skipCountdown}s",
+                                fontSize = 11.sp,
+                                color = QOnSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
         // Bottom Gradient Scrim for readable text
         Box(

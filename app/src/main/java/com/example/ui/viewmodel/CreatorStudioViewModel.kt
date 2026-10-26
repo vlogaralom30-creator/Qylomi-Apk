@@ -385,6 +385,70 @@ class CreatorStudioViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
+    fun batchAddEpisodesWithSources(
+        seriesId: String,
+        seasonNumber: Int,
+        startEpisodeNum: Int,
+        count: Int,
+        titlePrefix: String,
+        urls: List<String>,
+        defaultServerLabel: String = "Server 1",
+        defaultQuality: String = "1080p",
+        defaultLanguage: String? = null,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val uid = repository.currentUserId ?: ""
+            var addedCount = 0
+            var currentEpNum = startEpisodeNum
+
+            for (i in 0 until count) {
+                val epTitle = if (titlePrefix.isNotBlank()) "$titlePrefix $currentEpNum" else "Episode $currentEpNum"
+                val urlForEp = urls.getOrNull(i)?.trim() ?: ""
+
+                val epInsert = EpisodeInsert(
+                    seriesId = seriesId,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = currentEpNum,
+                    title = epTitle,
+                    createdBy = uid,
+                    isPublished = true
+                )
+
+                val epRes = repository.createEpisode(epInsert)
+                if (epRes.isSuccess) {
+                    val createdEp = epRes.getOrNull()
+                    if (createdEp != null && urlForEp.isNotBlank()) {
+                        val platformStr = when {
+                            urlForEp.contains("cloudflare") || urlForEp.contains("videodelivery") -> "cloudflare"
+                            urlForEp.contains("youtube") || urlForEp.contains("youtu.be") -> "youtube"
+                            urlForEp.contains("vimeo") -> "vimeo"
+                            urlForEp.contains("drive.google") -> "gdrive"
+                            urlForEp.endsWith(".m3u8") -> "hls"
+                            urlForEp.endsWith(".mp4") -> "mp4"
+                            else -> "direct"
+                        }
+                        val sourceInsert = SourceInsert(
+                            episodeId = createdEp.id,
+                            label = defaultServerLabel,
+                            url = urlForEp,
+                            platform = platformStr,
+                            language = defaultLanguage,
+                            quality = defaultQuality,
+                            isActive = true
+                        )
+                        repository.createSource(sourceInsert)
+                    }
+                    addedCount++
+                }
+                currentEpNum++
+            }
+            loadSeriesContent(seriesId)
+            onDone(true, "Batch generated $addedCount episode(s) for Season $seasonNumber!")
+        }
+    }
+
+
     // -------------------------------------------------------------------------
     // Sources
     // -------------------------------------------------------------------------

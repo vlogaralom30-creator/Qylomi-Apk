@@ -196,6 +196,7 @@ fun NativeVideoPlayer(
 
                 if (isAudioSinkError) {
                     // Non-fatal audio track timestamp discontinuity: flush audio sink and resume gracefully
+                    errorMessage = null
                     val currentPos = exoPlayer.currentPosition
                     exoPlayer.playWhenReady = false
                     exoPlayer.seekTo(if (currentPos > 100) currentPos else 0L)
@@ -206,6 +207,7 @@ fun NativeVideoPlayer(
                 } else {
                     isBuffering = false
                     errorMessage = msg
+                    android.util.Log.e("REELS_TT", "Playback error: $msg, code: ${error.errorCode}, cause: $causeString, url: $playUrl")
                     onError(msg)
                 }
             }
@@ -262,10 +264,10 @@ fun NativeVideoPlayer(
         }
     }
 
-    val boxModifier = if (aspectRatio != null && aspectRatio > 0f) {
-        modifier.fillMaxWidth().aspectRatio(aspectRatio)
-    } else {
-        modifier.fillMaxWidth().aspectRatio(detectedAspectRatio)
+    val boxModifier = when {
+        aspectRatio != null && aspectRatio > 0f -> modifier.fillMaxWidth().aspectRatio(aspectRatio)
+        aspectRatio != null && aspectRatio == 0f -> modifier
+        else -> modifier.fillMaxWidth().aspectRatio(detectedAspectRatio)
     }
 
     Box(

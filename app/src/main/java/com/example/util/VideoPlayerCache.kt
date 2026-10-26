@@ -50,9 +50,13 @@ object VideoPlayerCache {
         val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent(USER_AGENT)
         
+        val allHeaders = mutableMapOf<String, String>()
+        allHeaders["Referer"] = "https://www.tikwm.com/"
+        allHeaders["User-Agent"] = USER_AGENT
         if (!headers.isNullOrEmpty()) {
-            httpDataSourceFactory.setDefaultRequestProperties(headers)
+            allHeaders.putAll(headers)
         }
+        httpDataSourceFactory.setDefaultRequestProperties(allHeaders)
 
         return CacheDataSource.Factory()
             .setCache(cache)

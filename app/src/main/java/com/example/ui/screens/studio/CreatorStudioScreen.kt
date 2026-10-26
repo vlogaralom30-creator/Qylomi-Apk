@@ -300,38 +300,125 @@ fun CreatorStudioScreen(
         )
     }
 
-    // Dialog: Bulk Add Episodes
+    // Dialog: Batch Add Episodes & Video Sources
     if (showBulkAddDialog && selectedSeries != null) {
-        var countText by remember { mutableStateOf("5") }
-        var selectedSeasonNum by remember { mutableIntStateOf(1) }
+        var countText by remember { mutableStateOf("12") }
+        var startEpText by remember { mutableStateOf("1") }
+        var seasonNumText by remember { mutableStateOf("1") }
+        var titlePrefix by remember { mutableStateOf("Episode") }
+        var urlsText by remember { mutableStateOf("") }
+        var serverLabel by remember { mutableStateOf("Server 1") }
+        var quality by remember { mutableStateOf("1080p") }
+        var language by remember { mutableStateOf("Japanese Subbed") }
 
         AlertDialog(
             onDismissRequest = { showBulkAddDialog = false },
-            title = { Text("Bulk Add Episodes") },
+            title = { Text("Batch Episode Generator") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Quickly generate multiple placeholder episodes titled 'Episode N'.", fontSize = 13.sp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Batch create episodes and attach video URLs automatically. Paste stream links below (one per line).",
+                        fontSize = 12.sp,
+                        color = QOnSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = seasonNumText,
+                            onValueChange = { seasonNumText = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Season #") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = startEpText,
+                            onValueChange = { startEpText = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Start Ep #") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = countText,
+                            onValueChange = { countText = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Ep Count") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
                     OutlinedTextField(
-                        value = countText,
-                        onValueChange = { countText = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("Number of Episodes") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        value = titlePrefix,
+                        onValueChange = { titlePrefix = it },
+                        label = { Text("Title Prefix (e.g., Episode)") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    OutlinedTextField(
+                        value = urlsText,
+                        onValueChange = { urlsText = it },
+                        label = { Text("Stream URLs (One URL per line)") },
+                        placeholder = { Text("https://server.com/ep1.m3u8\nhttps://server.com/ep2.m3u8...") },
+                        minLines = 4,
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = serverLabel,
+                            onValueChange = { serverLabel = it },
+                            label = { Text("Server Label") },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = language,
+                            onValueChange = { language = it },
+                            label = { Text("Audio/Sub") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val count = countText.toIntOrNull() ?: 1
+                        val startEp = startEpText.toIntOrNull() ?: 1
+                        val seasonNum = seasonNumText.toIntOrNull() ?: 1
+                        val urlsList = urlsText.lines().map { it.trim() }.filter { it.isNotBlank() }
+
                         showBulkAddDialog = false
-                        viewModel.bulkAddEpisodes(selectedSeries!!.id, selectedSeasonNum, count) { success, msg ->
+                        viewModel.batchAddEpisodesWithSources(
+                            seriesId = selectedSeries!!.id,
+                            seasonNumber = seasonNum,
+                            startEpisodeNum = startEp,
+                            count = count.coerceAtLeast(if (urlsList.isNotEmpty()) urlsList.size else 1),
+                            titlePrefix = titlePrefix.trim(),
+                            urls = urlsList,
+                            defaultServerLabel = serverLabel.ifBlank { "Server 1" },
+                            defaultQuality = quality,
+                            defaultLanguage = language.ifBlank { null }
+                        ) { success, msg ->
                             Toast.makeText(context, msg ?: "", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = QYellowDark, contentColor = Color.Black)
                 ) {
-                    Text("Create")
+                    Text("Batch Generate", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -342,6 +429,7 @@ fun CreatorStudioScreen(
             textContentColor = QOnSurfaceVariant
         )
     }
+
 
     // Dialog: Add Season
     if (showAddSeasonDialog && selectedSeries != null) {

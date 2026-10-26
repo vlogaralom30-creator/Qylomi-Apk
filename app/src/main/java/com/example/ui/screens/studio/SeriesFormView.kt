@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.*
+import com.example.ui.components.ImgBbUrlInputField
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.CreatorStudioViewModel
 
@@ -366,43 +367,21 @@ fun SeriesFormView(
         )
 
         // 9. Media URLs (Poster 2:3 & Banner 16:9)
-        OutlinedTextField(
+        ImgBbUrlInputField(
             value = posterUrl,
             onValueChange = { posterUrl = it },
-            label = { Text("Poster URL (2:3 tall aspect ratio)") },
-            modifier = Modifier.fillMaxWidth()
+            label = "Poster URL (2:3 tall aspect ratio)",
+            previewAspectRatio = 2f / 3f,
+            testTag = "input_poster_url"
         )
-        if (posterUrl.isNotBlank()) {
-            AsyncImage(
-                model = posterUrl,
-                contentDescription = "Poster Preview",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(100.dp)
-                    .height(150.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(QSurfaceVariant)
-            )
-        }
 
-        OutlinedTextField(
+        ImgBbUrlInputField(
             value = bannerUrl,
             onValueChange = { bannerUrl = it },
-            label = { Text("Banner URL (16:9 wide aspect ratio)") },
-            modifier = Modifier.fillMaxWidth()
+            label = "Banner URL (16:9 wide aspect ratio)",
+            previewAspectRatio = 16f / 9f,
+            testTag = "input_banner_url"
         )
-        if (bannerUrl.isNotBlank()) {
-            AsyncImage(
-                model = bannerUrl,
-                contentDescription = "Banner Preview",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(QSurfaceVariant)
-            )
-        }
 
         OutlinedTextField(
             value = trailerUrl,
