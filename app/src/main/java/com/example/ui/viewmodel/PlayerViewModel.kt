@@ -51,15 +51,27 @@ data class PlayerUiState(
     val isReportSheetOpen: Boolean = false,
     val isSubmittingReport: Boolean = false,
     val reportSuccessMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val autoPlayNextEnabled: Boolean = true
 )
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = SeriesRepository(application)
     private val prefs = application.getSharedPreferences("q_player_prefs", Context.MODE_PRIVATE)
 
-    private val _uiState = MutableStateFlow(PlayerUiState())
+    private val _uiState = MutableStateFlow(
+        PlayerUiState(autoPlayNextEnabled = prefs.getBoolean("auto_play_next", true))
+    )
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    fun toggleAutoPlayNext(enabled: Boolean? = null) {
+        val newMode = enabled ?: !_uiState.value.autoPlayNextEnabled
+        prefs.edit().putBoolean("auto_play_next", newMode).apply()
+        _uiState.update { it.copy(autoPlayNextEnabled = newMode) }
+        if (!newMode) {
+            cancelAutoplayCountdown()
+        }
+    }
 
     private var progressSyncJob: Job? = null
     private var recordViewJob: Job? = null
@@ -349,7 +361,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         val currentEp = state.currentEpisode
         val allEps = state.episodes
         val currentIdx = allEps.indexOfFirst { it.id == currentEp.id }
-        if (currentIdx >= 0 && currentIdx + 1 < allEps.size) {
+        if (state.autoPlayNextEnabled && currentIdx >= 0 && currentIdx + 1 < allEps.size) {
             startAutoplayCountdown()
         }
     }

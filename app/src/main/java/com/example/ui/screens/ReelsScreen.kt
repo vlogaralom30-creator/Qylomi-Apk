@@ -214,7 +214,7 @@ fun ReelsScreen(
                 beyondViewportPageCount = 1
             ) { page ->
                 val reel = reels[page]
-                val isCurrentPage = pagerState.settledPage == page
+                val isCurrentPage = pagerState.currentPage == page && !pagerState.isScrollInProgress
 
                 ReelPageItem(
                     reel = reel,
@@ -425,34 +425,42 @@ fun ReelPageItem(
         }
     }
 
+    var triggerRecovery by remember(reel.id) { mutableStateOf(false) }
+
+    LaunchedEffect(triggerRecovery, reel.id) {
+        if (triggerRecovery) {
+            Log.d("REELS_TT", "Starting single automatic recovery for reel ${reel.id}")
+            val mediaKey = MediaKey(
+                url = extractionUrl,
+                platform = if (isTikTok) "tiktok" else if (isDrive) "gdrive" else "direct"
+            )
+            try {
+                val resolved = MediaResolver.resolve(mediaKey, force = true, isHighPriority = true)
+                if (resolved.isDirectPlayable && resolved.url.isNotBlank() && resolved.url != activePlayUrl) {
+                    Log.d("REELS_TT", "Auto-recovery obtained fresh directUrl: ${resolved.url}")
+                    activePlayUrl = resolved.url
+                    activeHeaders = resolved.headers
+                    playbackMode = ReelPlaybackMode.NATIVE
+                } else {
+                    Log.w("REELS_TT", "Auto-recovery failed or non-playable, falling back to EMBED WebView")
+                    activePlayUrl = resolved.embedUrl ?: videoDetails?.embedUrl ?: sourceUrl
+                    playbackMode = ReelPlaybackMode.EMBED
+                }
+            } catch (e: Exception) {
+                Log.e("REELS_TT", "Auto-recovery exception: ${e.message}, falling back to EMBED WebView")
+                activePlayUrl = videoDetails?.embedUrl ?: sourceUrl
+                playbackMode = ReelPlaybackMode.EMBED
+            } finally {
+                triggerRecovery = false
+            }
+        }
+    }
+
     val handleNativePlaybackError: (String) -> Unit = { err ->
         Log.e("REELS_TT", "Playback error in NativeVideoPlayer: $err, url: $activePlayUrl, hasRecoveredOnce: $hasRecoveredOnce")
         if (!hasRecoveredOnce) {
             hasRecoveredOnce = true
-            coroutineScope.launch {
-                Log.d("REELS_TT", "Starting single automatic recovery for reel ${reel.id}")
-                val mediaKey = MediaKey(
-                    url = extractionUrl,
-                    platform = if (isTikTok) "tiktok" else if (isDrive) "gdrive" else "direct"
-                )
-                try {
-                    val resolved = MediaResolver.resolve(mediaKey, force = true, isHighPriority = true)
-                    if (resolved.isDirectPlayable && resolved.url.isNotBlank() && resolved.url != activePlayUrl) {
-                        Log.d("REELS_TT", "Auto-recovery obtained fresh directUrl: ${resolved.url}")
-                        activePlayUrl = resolved.url
-                        activeHeaders = resolved.headers
-                        playbackMode = ReelPlaybackMode.NATIVE
-                    } else {
-                        Log.w("REELS_TT", "Auto-recovery failed or non-playable, falling back to EMBED WebView")
-                        activePlayUrl = resolved.embedUrl ?: videoDetails?.embedUrl ?: sourceUrl
-                        playbackMode = ReelPlaybackMode.EMBED
-                    }
-                } catch (e: Exception) {
-                    Log.e("REELS_TT", "Auto-recovery exception: ${e.message}, falling back to EMBED WebView")
-                    activePlayUrl = videoDetails?.embedUrl ?: sourceUrl
-                    playbackMode = ReelPlaybackMode.EMBED
-                }
-            }
+            triggerRecovery = true
         } else {
             Log.w("REELS_TT", "Already attempted recovery once. Falling back to EMBED WebView.")
             activePlayUrl = videoDetails?.embedUrl ?: sourceUrl
@@ -555,6 +563,15 @@ fun ReelPageItem(
                                         Log.e("REELS_TT", "Embed fallback error: $description")
                                         playbackMode = ReelPlaybackMode.FAILED
                                     }
+
+                                    override fun onRenderProcessGone(
+                                        view: WebView?,
+                                        detail: android.webkit.RenderProcessGoneDetail?
+                                    ): Boolean {
+                                        try { view?.destroy() } catch (_: Exception) {}
+                                        playbackMode = ReelPlaybackMode.FAILED
+                                        return true
+                                    }
                                 }
                                 val embedUrl = if (isTikTok) {
                                     val id = VideoPlatformRegistry.resolve(sourceUrl).parse(sourceUrl)?.videoId
@@ -578,6 +595,17 @@ fun ReelPageItem(
                                     </html>
                                 """.trimIndent()
                                 loadDataWithBaseURL("https://www.tiktok.com", html, "text/html", "UTF-8", null)
+                            }
+                        },
+                        onRelease = { webView ->
+                            try {
+                                webView.stopLoading()
+                                webView.loadUrl("about:blank")
+                                webView.webChromeClient = null
+                                (webView.parent as? ViewGroup)?.removeView(webView)
+                                webView.destroy()
+                            } catch (e: Exception) {
+                                Log.e("REELS_TT", "Error releasing WebView: ${e.message}")
                             }
                         },
                         modifier = Modifier.fillMaxSize()

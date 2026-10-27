@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -24,7 +26,7 @@ import com.example.data.model.UserProfile
 import com.example.ui.theme.*
 
 enum class DrawerDestination {
-    FEED, SERIES, EXPLORE, GROUPS, REELS, SAVED, NOTIFICATIONS, CREATOR_STUDIO, ADMIN_STUDIO
+    FEED, SERIES, EXPLORE, GROUPS, REELS, SAVED, NOTIFICATIONS, CREATOR_STUDIO, ADMIN_STUDIO, SETTINGS
 }
 
 @Composable
@@ -41,8 +43,8 @@ fun QNavigationDrawerSheet(
         modifier = modifier
             .width(300.dp)
             .fillMaxHeight(),
-        drawerContainerColor = QSurface,
-        drawerContentColor = QOnSurface
+        drawerContainerColor = MaterialTheme.colorScheme.surface,
+        drawerContentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Column(
             modifier = Modifier
@@ -70,12 +72,12 @@ fun QNavigationDrawerSheet(
                         text = currentUser?.displayName ?: "Guest User",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = QOnSurface
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = if (currentUser != null) "@${currentUser.username}" else "Sign in for full access",
                         fontSize = 12.sp,
-                        color = QOnSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     // Role Chip if creator or admin
@@ -100,7 +102,7 @@ fun QNavigationDrawerSheet(
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                color = QCardBorder
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
             )
 
             // 2. Primary Navigation Destinations
@@ -173,7 +175,7 @@ fun QNavigationDrawerSheet(
             if (currentUser != null && (currentUser.canCreateSeries || currentUser.isAdmin)) {
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    color = QCardBorder
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                 )
 
                 if (currentUser.canCreateSeries) {
@@ -191,8 +193,8 @@ fun QNavigationDrawerSheet(
                 if (currentUser.isAdmin) {
                     DrawerItem(
                         label = "Admin Studio",
-                        icon = Icons.Outlined.Settings,
-                        selectedIcon = Icons.Filled.Settings,
+                        icon = Icons.Outlined.AdminPanelSettings,
+                        selectedIcon = Icons.Filled.AdminPanelSettings,
                         isSelected = selectedDestination == DrawerDestination.ADMIN_STUDIO,
                         accentColor = Color(0xFFD32F2F),
                         onClick = { onDestinationSelect(DrawerDestination.ADMIN_STUDIO) },
@@ -203,17 +205,27 @@ fun QNavigationDrawerSheet(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            )
+
+            // Settings item
+            DrawerItem(
+                label = "Settings",
+                icon = Icons.Outlined.Settings,
+                selectedIcon = Icons.Filled.Settings,
+                isSelected = selectedDestination == DrawerDestination.SETTINGS,
+                onClick = { onDestinationSelect(DrawerDestination.SETTINGS) },
+                testTag = "drawer_item_settings"
+            )
+
             // 4. Logout / Bottom Footer
             if (currentUser != null) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    color = QCardBorder
-                )
-
                 DrawerItem(
                     label = "Log Out",
-                    icon = Icons.Outlined.Logout,
-                    selectedIcon = Icons.Filled.Logout,
+                    icon = Icons.AutoMirrored.Outlined.Logout,
+                    selectedIcon = Icons.AutoMirrored.Filled.Logout,
                     isSelected = false,
                     accentColor = QLikeRed,
                     onClick = onLogoutClick,
@@ -236,7 +248,7 @@ private fun DrawerItem(
     badgeText: String? = null,
     badgeCount: Int = 0
 ) {
-    val tint = accentColor ?: if (isSelected) QYellowPrimary else QOnSurface
+    val tint = accentColor ?: if (isSelected) QYellowPrimary else MaterialTheme.colorScheme.onSurface
 
     Row(
         modifier = Modifier

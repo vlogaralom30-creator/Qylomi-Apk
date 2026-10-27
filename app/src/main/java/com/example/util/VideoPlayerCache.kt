@@ -45,16 +45,31 @@ object VideoPlayerCache {
         }
     }
 
+    @Synchronized
+    fun clearCache(context: Context) {
+        try {
+            simpleCache?.release()
+            simpleCache = null
+            val cacheDir = File(context.applicationContext.cacheDir, "media3_video_cache")
+            if (cacheDir.exists()) {
+                cacheDir.deleteRecursively()
+            }
+        } catch (_: Exception) {}
+    }
+
     fun buildCacheDataSourceFactory(context: Context, headers: Map<String, String>? = null): DataSource.Factory {
         val cache = getCache(context)
         val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent(USER_AGENT)
         
         val allHeaders = mutableMapOf<String, String>()
-        allHeaders["Referer"] = "https://www.tikwm.com/"
+        allHeaders["Referer"] = "https://www.tiktok.com/"
         allHeaders["User-Agent"] = USER_AGENT
         if (!headers.isNullOrEmpty()) {
             allHeaders.putAll(headers)
+        }
+        if (allHeaders["Referer"]?.contains("tikwm.com") == true) {
+            allHeaders["Referer"] = "https://www.tiktok.com/"
         }
         httpDataSourceFactory.setDefaultRequestProperties(allHeaders)
 

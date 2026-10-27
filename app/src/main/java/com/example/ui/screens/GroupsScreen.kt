@@ -62,13 +62,17 @@ import com.example.ui.theme.QSurfaceVariant
 import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowPrimary
 
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.IconButton
+
 @Composable
 fun GroupsScreen(
     groups: List<GroupCommunity>,
     isLoading: Boolean,
     onGroupClick: (GroupCommunity) -> Unit,
     onToggleJoin: (GroupCommunity) -> Unit,
-    onCreateGroupClick: () -> Unit
+    onCreateGroupClick: () -> Unit,
+    onBack: (() -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
@@ -100,6 +104,21 @@ fun GroupsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (onBack != null) {
+                            IconButton(
+                                onClick = onBack,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("groups_back_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = QOnSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
                         Icon(
                             imageVector = Icons.Default.Groups,
                             contentDescription = null,

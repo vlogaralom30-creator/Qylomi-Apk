@@ -7,44 +7,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Colorize
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.GridOn
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,20 +28,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.PixelArtData
-import com.example.ui.theme.QCardBorder
-import com.example.ui.theme.QLikeRed
-import com.example.ui.theme.QOnSurface
-import com.example.ui.theme.QOnSurfaceVariant
-import com.example.ui.theme.QOnYellow
-import com.example.ui.theme.QSurface
-import com.example.ui.theme.QSurfaceVariant
-import com.example.ui.theme.QYellowDark
-import com.example.ui.theme.QYellowLight
-import com.example.ui.theme.QYellowPrimary
+import com.example.ui.theme.*
 import com.example.util.PixelArtUtils
 
 enum class DrawingTool {
     PENCIL, ERASER, EYEDROPPER
+}
+
+enum class PaletteChoice(val title: String, val colors: List<String>) {
+    NEON("Neon", PixelArtUtils.cyberNeonPalette),
+    PICO8("Pico-8", PixelArtUtils.pico8Palette),
+    CLASSIC16("Classic", PixelArtUtils.classic16Palette),
+    GAMEBOY("GameBoy", PixelArtUtils.gameboyPalette),
+    PASTEL("Pastel", PixelArtUtils.pastelPalette)
 }
 
 @Composable
@@ -83,10 +52,11 @@ fun PixelArtCanvasStudio(
     var gridSize by remember { mutableStateOf(initialData?.gridSize ?: 32) }
     var currentTool by remember { mutableStateOf(DrawingTool.PENCIL) }
     var brushSizePx by remember { mutableStateOf(2) } // 1px, 2px, 3px, 4px
-    var selectedColorHex by remember { mutableStateOf("#00E5FF") }
+    var selectedPalette by remember { mutableStateOf(PaletteChoice.NEON) }
+    var selectedColorHex by remember { mutableStateOf(PaletteChoice.NEON.colors[1]) }
     var showGridLines by remember { mutableStateOf(true) }
 
-    // Stroke ordered index list (preserves hand movement)
+    // Stroke ordered index list
     val drawnPixels = remember { mutableStateListOf<Int>().apply { initialData?.pixels?.let { addAll(it) } } }
     // Color map: Index string -> Hex
     val colorMap = remember { mutableStateMapOf<String, String>().apply { initialData?.colors?.let { putAll(it) } } }
@@ -155,41 +125,49 @@ fun PixelArtCanvasStudio(
             .testTag("pixel_art_studio_card")
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header: Tool Title & Resolution Chips
+            // Header: Title & Resolution Selector
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Brush, contentDescription = null, tint = QYellowDark, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.Brush,
+                        contentDescription = null,
+                        tint = QYellowPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Pixel Art Studio",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         color = QOnSurface
                     )
                 }
 
-                // Grid Size Selector Chips (16x16, 24x24, 32x32, 48x48, 64x64)
+                // Grid Size Chips
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf(16, 24, 32, 48, 64).forEach { sizeOption ->
-                        val isSelected = gridSize == sizeOption
+                    listOf(16, 24, 32).forEach { size ->
+                        val isSelected = gridSize == size
                         Box(
-                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(8.dp))
                                 .background(if (isSelected) QYellowPrimary else QSurfaceVariant)
                                 .clickable {
-                                    pushUndoState()
-                                    gridSize = sizeOption
+                                    if (gridSize != size) {
+                                        pushUndoState()
+                                        gridSize = size
+                                        drawnPixels.clear()
+                                        colorMap.clear()
+                                    }
                                 }
-                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "${sizeOption}x${sizeOption}",
-                                fontSize = 10.sp,
+                                text = "${size}x${size}",
+                                fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) QOnYellow else QOnSurfaceVariant
                             )
@@ -198,24 +176,149 @@ fun PixelArtCanvasStudio(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Main Interactive Drawing Canvas
+            // Tool & Action Toolbar
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Pencil
+                    IconButton(
+                        onClick = { currentTool = DrawingTool.PENCIL },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(
+                                if (currentTool == DrawingTool.PENCIL) QYellowPrimary.copy(alpha = 0.2f) else Color.Transparent,
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Pencil",
+                            tint = if (currentTool == DrawingTool.PENCIL) QYellowDark else QOnSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Eraser
+                    IconButton(
+                        onClick = { currentTool = DrawingTool.ERASER },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(
+                                if (currentTool == DrawingTool.ERASER) QYellowPrimary.copy(alpha = 0.2f) else Color.Transparent,
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Eraser",
+                            tint = if (currentTool == DrawingTool.ERASER) QYellowDark else QOnSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Eyedropper
+                    IconButton(
+                        onClick = { currentTool = DrawingTool.EYEDROPPER },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(
+                                if (currentTool == DrawingTool.EYEDROPPER) QYellowPrimary.copy(alpha = 0.2f) else Color.Transparent,
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Colorize,
+                            contentDescription = "Eyedropper",
+                            tint = if (currentTool == DrawingTool.EYEDROPPER) QYellowDark else QOnSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Grid toggle
+                    IconButton(
+                        onClick = { showGridLines = !showGridLines },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GridOn,
+                            contentDescription = "Toggle Grid",
+                            tint = if (showGridLines) QYellowDark else QOnSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Undo
+                    IconButton(
+                        onClick = {
+                            if (undoStack.isNotEmpty()) {
+                                redoStack.add(Pair(drawnPixels.toList(), colorMap.toMap()))
+                                val prev = undoStack.removeAt(undoStack.size - 1)
+                                drawnPixels.clear()
+                                drawnPixels.addAll(prev.first)
+                                colorMap.clear()
+                                colorMap.putAll(prev.second)
+                            }
+                        },
+                        enabled = undoStack.isNotEmpty(),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Undo,
+                            contentDescription = "Undo",
+                            tint = if (undoStack.isNotEmpty()) QOnSurface else QOnSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Redo
+                    IconButton(
+                        onClick = {
+                            if (redoStack.isNotEmpty()) {
+                                undoStack.add(Pair(drawnPixels.toList(), colorMap.toMap()))
+                                val next = redoStack.removeAt(redoStack.size - 1)
+                                drawnPixels.clear()
+                                drawnPixels.addAll(next.first)
+                                colorMap.clear()
+                                colorMap.putAll(next.second)
+                            }
+                        },
+                        enabled = redoStack.isNotEmpty(),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Redo,
+                            contentDescription = "Redo",
+                            tint = if (redoStack.isNotEmpty()) QOnSurface else QOnSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Canvas Drawing Surface
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF0F172A))
-                    .border(1.dp, QCardBorder, RoundedCornerShape(12.dp))
                     .pointerInput(gridSize, currentTool, brushSizePx, selectedColorHex) {
                         detectTapGestures(
                             onPress = { offset ->
                                 pushUndoState()
                                 val cellX = (offset.x / (size.width / gridSize)).toInt().coerceIn(0, gridSize - 1)
                                 val cellY = (offset.y / (size.height / gridSize)).toInt().coerceIn(0, gridSize - 1)
-                                lastCellX = cellX
-                                lastCellY = cellY
+                                lastCellX = null
+                                lastCellY = null
                                 applyTouchAtCell(cellX, cellY)
                             }
                         )
@@ -226,8 +329,8 @@ fun PixelArtCanvasStudio(
                                 pushUndoState()
                                 val cellX = (offset.x / (size.width / gridSize)).toInt().coerceIn(0, gridSize - 1)
                                 val cellY = (offset.y / (size.height / gridSize)).toInt().coerceIn(0, gridSize - 1)
-                                lastCellX = cellX
-                                lastCellY = cellY
+                                lastCellX = null
+                                lastCellY = null
                                 applyTouchAtCell(cellX, cellY)
                             },
                             onDragEnd = {
@@ -245,188 +348,121 @@ fun PixelArtCanvasStudio(
                                 applyTouchAtCell(cellX, cellY)
                             }
                         )
-                    },
-                contentAlignment = Alignment.Center
+                    }
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val cellSize = size.width / gridSize
 
-                    // Render Drawn Pixels
-                    drawnPixels.forEach { index ->
-                        val x = PixelArtUtils.indexToX(index, gridSize)
-                        val y = PixelArtUtils.indexToY(index, gridSize)
-                        val hexColor = colorMap[index.toString()] ?: "#FFFFFF"
+                    // Render drawn pixels
+                    drawnPixels.forEach { idx ->
+                        val px = PixelArtUtils.indexToX(idx, gridSize)
+                        val py = PixelArtUtils.indexToY(idx, gridSize)
+                        val hex = colorMap[idx.toString()] ?: "#FFFFFF"
                         val parsedColor = try {
-                            Color(android.graphics.Color.parseColor(hexColor))
+                            Color(android.graphics.Color.parseColor(hex))
                         } catch (_: Exception) {
                             Color.White
                         }
-
                         drawRect(
                             color = parsedColor,
-                            topLeft = Offset(x * cellSize, y * cellSize),
+                            topLeft = Offset(px * cellSize, py * cellSize),
                             size = Size(cellSize, cellSize)
                         )
                     }
 
-                    // Optional Grid Lines
-                    if (showGridLines && gridSize <= 64) {
-                        val gridColor = Color.White.copy(alpha = 0.08f)
-                        for (i in 1 until gridSize) {
-                            val pos = i * cellSize
-                            drawLine(gridColor, start = Offset(pos, 0f), end = Offset(pos, size.height), strokeWidth = 1f)
-                            drawLine(gridColor, start = Offset(0f, pos), end = Offset(size.width, pos), strokeWidth = 1f)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Toolbar 1: Drawing Tools & Brush Size
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Tools (Pencil, Eraser, Eyedropper)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (currentTool == DrawingTool.PENCIL) QYellowPrimary else QSurfaceVariant)
-                            .clickable { currentTool = DrawingTool.PENCIL }
-                            .padding(8.dp)
-                    ) {
-                        Icon(Icons.Default.Brush, contentDescription = "Pencil", tint = if (currentTool == DrawingTool.PENCIL) QOnYellow else QOnSurfaceVariant, modifier = Modifier.size(18.dp))
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (currentTool == DrawingTool.ERASER) QYellowPrimary else QSurfaceVariant)
-                            .clickable { currentTool = DrawingTool.ERASER }
-                            .padding(8.dp)
-                    ) {
-                        Text("🧹", fontSize = 14.sp)
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (currentTool == DrawingTool.EYEDROPPER) QYellowPrimary else QSurfaceVariant)
-                            .clickable { currentTool = DrawingTool.EYEDROPPER }
-                            .padding(8.dp)
-                    ) {
-                        Icon(Icons.Default.Colorize, contentDescription = "Eyedropper", tint = if (currentTool == DrawingTool.EYEDROPPER) QOnYellow else QOnSurfaceVariant, modifier = Modifier.size(18.dp))
-                    }
-                }
-
-                // Brush Thickness (1px, 2px, 3px, 4px)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("Thickness:", fontSize = 11.sp, color = QOnSurfaceVariant, fontWeight = FontWeight.Bold)
-                    listOf(1, 2, 3, 4).forEach { size ->
-                        val isSelected = brushSizePx == size
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) QYellowPrimary else QSurfaceVariant)
-                                .clickable { brushSizePx = size }
-                        ) {
-                            Text(
-                                text = "${size}p",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) QOnYellow else QOnSurfaceVariant
+                    // Grid lines overlay
+                    if (showGridLines) {
+                        val gridStrokeColor = Color.White.copy(alpha = 0.08f)
+                        for (i in 0..gridSize) {
+                            drawLine(
+                                color = gridStrokeColor,
+                                start = Offset(i * cellSize, 0f),
+                                end = Offset(i * cellSize, size.height),
+                                strokeWidth = 1f
+                            )
+                            drawLine(
+                                color = gridStrokeColor,
+                                start = Offset(0f, i * cellSize),
+                                end = Offset(size.width, i * cellSize),
+                                strokeWidth = 1f
                             )
                         }
-                    }
-                }
-
-                // Grid Lines & Undo / Redo
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(
-                        onClick = { showGridLines = !showGridLines },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(Icons.Default.GridOn, contentDescription = "Toggle Grid", tint = if (showGridLines) QYellowPrimary else QOnSurfaceVariant, modifier = Modifier.size(18.dp))
-                    }
-
-                    IconButton(
-                        onClick = {
-                            if (undoStack.isNotEmpty()) {
-                                redoStack.add(Pair(drawnPixels.toList(), colorMap.toMap()))
-                                val lastState = undoStack.removeAt(undoStack.size - 1)
-                                drawnPixels.clear()
-                                drawnPixels.addAll(lastState.first)
-                                colorMap.clear()
-                                colorMap.putAll(lastState.second)
-                            }
-                        },
-                        enabled = undoStack.isNotEmpty(),
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(Icons.Default.Undo, contentDescription = "Undo", tint = if (undoStack.isNotEmpty()) QOnSurface else QOnSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
-                    }
-
-                    IconButton(
-                        onClick = {
-                            if (redoStack.isNotEmpty()) {
-                                undoStack.add(Pair(drawnPixels.toList(), colorMap.toMap()))
-                                val nextState = redoStack.removeAt(redoStack.size - 1)
-                                drawnPixels.clear()
-                                drawnPixels.addAll(nextState.first)
-                                colorMap.clear()
-                                colorMap.putAll(nextState.second)
-                            }
-                        },
-                        enabled = redoStack.isNotEmpty(),
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(Icons.Default.Redo, contentDescription = "Redo", tint = if (redoStack.isNotEmpty()) QOnSurface else QOnSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Palette Swatches Strip (PICO-8 & Cyber Neon)
+            // Palette Category Tabs
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                PixelArtUtils.cyberNeonPalette.plus(PixelArtUtils.pico8Palette).distinct().forEach { hex ->
-                    val parsedColor = try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { Color.Cyan }
+                PaletteChoice.values().forEach { palette ->
+                    val isChosen = selectedPalette == palette
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isChosen) QYellowPrimary else QSurfaceVariant)
+                            .clickable {
+                                selectedPalette = palette
+                                if (!palette.colors.contains(selectedColorHex)) {
+                                    selectedColorHex = palette.colors.first()
+                                }
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = palette.title,
+                            fontSize = 11.sp,
+                            fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isChosen) QOnYellow else QOnSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Color Swatches for the chosen palette
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                selectedPalette.colors.forEach { hex ->
                     val isSelected = selectedColorHex.equals(hex, ignoreCase = true)
+                    val swatchColor = try {
+                        Color(android.graphics.Color.parseColor(hex))
+                    } catch (_: Exception) {
+                        Color.White
+                    }
 
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .background(parsedColor)
+                            .background(swatchColor)
                             .border(
-                                width = if (isSelected) 2.5.dp else 1.dp,
+                                width = if (isSelected) 3.dp else 1.dp,
                                 color = if (isSelected) QYellowPrimary else Color.White.copy(alpha = 0.3f),
                                 shape = CircleShape
                             )
                             .clickable {
                                 selectedColorHex = hex
-                                if (currentTool == DrawingTool.ERASER) currentTool = DrawingTool.PENCIL
+                                currentTool = DrawingTool.PENCIL
                             }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Footer Action: Attach Art to Post Button
+            // Attach / Export Button
             Button(
                 onClick = {
                     val artData = PixelArtData(
@@ -436,23 +472,16 @@ fun PixelArtCanvasStudio(
                     )
                     onAttachArt(artData)
                 },
-                enabled = drawnPixels.isNotEmpty(),
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = QYellowPrimary,
                     contentColor = QOnYellow
                 ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Attach Pixel Art (${drawnPixels.size} Strokes)",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Attach Pixel Art (${drawnPixels.size} pixels)", fontWeight = FontWeight.Bold)
             }
         }
     }

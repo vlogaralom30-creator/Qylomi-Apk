@@ -346,6 +346,14 @@ class GoogleDriveHandler : VideoPlatformHandler {
                     settings.mediaPlaybackRequiresUserGesture = false
                     
                     webViewClient = object : android.webkit.WebViewClient() {
+                        override fun onRenderProcessGone(
+                            view: android.webkit.WebView?,
+                            detail: android.webkit.RenderProcessGoneDetail?
+                        ): Boolean {
+                            try { view?.destroy() } catch (_: Exception) {}
+                            return true
+                        }
+
                         override fun shouldOverrideUrlLoading(
                             view: android.webkit.WebView?,
                             request: android.webkit.WebResourceRequest?

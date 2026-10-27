@@ -89,11 +89,16 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         viewModelScope.launch {
-            repository.restoreSession()
-            loadFeed()
-            loadProfiles()
-            loadSavedPosts()
-            _isReady.value = true
+            try {
+                repository.restoreSession()
+                loadFeed()
+                loadProfiles()
+                loadSavedPosts()
+            } catch (e: Throwable) {
+                android.util.Log.e("SocialViewModel", "Initialization error: ${e.message}", e)
+            } finally {
+                _isReady.value = true
+            }
         }
     }
 

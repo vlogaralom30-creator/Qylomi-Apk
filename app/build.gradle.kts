@@ -16,11 +16,10 @@ android {
     applicationId = "com.aistudio.qsocial.qapp"
     minSdk = 24
     targetSdk = 35
-    versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toInt() ?: 1
+    versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toInt() ?: 1)
     versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    resourceConfigurations += listOf("en", "bn")
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
@@ -47,10 +46,12 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
-      // AI Studio.
-      // Note: assembleRelease requires KEYSTORE_PATH/STORE_PASSWORD/KEY_PASSWORD; CI skips release when secret is missing.
-      signingConfig = signingConfigs.getByName("release")
+      val hasReleaseKey = (System.getenv("KEYSTORE_PATH") != null && file(System.getenv("KEYSTORE_PATH")!!).exists()) || file("${rootDir}/my-upload-key.jks").exists()
+      signingConfig = if (hasReleaseKey) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debugConfig")
+      }
     }
     debug {
       // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
@@ -87,6 +88,7 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
+  // Configured for ImgBB and Drive API keys
 }
 
 // Some unused dependencies are commented out below instead of being removed.

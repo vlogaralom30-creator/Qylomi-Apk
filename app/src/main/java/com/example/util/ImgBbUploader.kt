@@ -5,136 +5,122 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
-import com.example.util.VideoPlayerCache.okHttpClient
+import com.example.BuildConfig
+import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.concurrent.TimeUnit
+
+@JsonClass(generateAdapter = true)
+data class ImgBbResponse(
+    val data: ImgBbData?,
+    val success: Boolean,
+    val status: Int?
+)
+
+@JsonClass(generateAdapter = true)
+data class ImgBbData(
+    val id: String?,
+    val title: String?,
+    val url: String?,
+    val display_url: String?,
+    val delete_url: String?
+)
 
 object ImgBbUploader {
-    private const val API_KEY = "69398385bcad0a0ef63957ec1b3b53f4"
-    private const val UPLOAD_ENDPOINT = "https://api.imgbb.com/1/upload"
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    private val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+    private val adapter = moshi.adapter(ImgBbResponse::class.java)
 
     /**
-     * Compress image from [Uri] and upload directly to ImgBB API v1.
-     * Returns direct image URL (e.g. https://i.ibb.co/...) on success.
+     * Upload an image by Uri to ImgBB and return direct image URL.
      */
-    suspend fun uploadImage(context: Context, imageUri: Uri): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun uploadImage(context: Context, imageUri: Uri, name: String? = null): Result<String> = withContext(Dispatchers.IO) {
+        val apiKey = try {
+            val field = BuildConfig::class.java.getField("IMGBB_API_KEY")
+            val key = field.get(null) as? String
+            key?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+
+        if (apiKey.isNullOrBlank()) {
+            return@withContext Result.failure(
+                IllegalStateException("ImgBB API key is not configured. Please add IMGBB_API_KEY in the Secrets panel.")
+            )
+        }
+
         try {
-            val compressedBytes = compressImageUri(context, imageUri)
-                ?: return@withContext Result.failure(IllegalArgumentException("Failed to decode or compress selected image"))
+            val inputStream: InputStream? = context.contentResolver.openInputStream(imageUri)
+                ?: return@withContext Result.failure(IllegalArgumentException("Cannot open image URI"))
 
-            val base64Data = Base64.encodeToString(compressedBytes, Base64.NO_WRAP)
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
 
-            val formBody = FormBody.Builder()
-                .add("key", API_KEY)
-                .add("image", base64Data)
-                .build()
-
-            val request = Request.Builder()
-                .url(UPLOAD_ENDPOINT)
-                .post(formBody)
-                .build()
-
-            val response = okHttpClient.newCall(request).execute()
-            val responseBodyStr = response.body?.string()
-            response.close()
-
-            if (!response.isSuccessful || responseBodyStr.isNullOrBlank()) {
-                return@withContext Result.failure(Exception("ImgBB upload failed with HTTP status ${response.code}"))
+            if (bitmap == null) {
+                return@withContext Result.failure(IllegalArgumentException("Failed to decode image bitmap"))
             }
 
-            val json = JSONObject(responseBodyStr)
-            val success = json.optBoolean("success", false)
+            // Compress to JPEG
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
+            val bytes = outputStream.toByteArray()
+            val base64Image = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
-            if (success) {
-                val data = json.getJSONObject("data")
-                var directUrl = data.optString("url")
-                if (directUrl.isBlank()) {
-                    directUrl = data.optString("display_url")
-                }
-                if (directUrl.isNotBlank()) {
-                    Result.success(directUrl)
-                } else {
-                    Result.failure(Exception("ImgBB API returned invalid image URL"))
-                }
-            } else {
-                val statusMsg = json.optJSONObject("error")?.optString("message") ?: "Unknown ImgBB API error"
-                Result.failure(Exception(statusMsg))
-            }
+            uploadBase64(apiKey, base64Image, name)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     /**
-     * Compress imageUri to JPEG byte array under maxDimensions (1920px) and quality (~82%).
+     * Upload raw Base64 image data to ImgBB.
      */
-    private fun compressImageUri(context: Context, uri: Uri): ByteArray? {
-        return try {
-            val contentResolver = context.contentResolver
+    suspend fun uploadBase64(apiKey: String, base64Data: String, name: String? = null): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val formBuilder = FormBody.Builder()
+                .add("key", apiKey)
+                .add("image", base64Data)
 
-            // 1. Decode bounds first
-            var inputStream: InputStream? = contentResolver.openInputStream(uri)
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeStream(inputStream, null, options)
-            inputStream?.close()
-
-            val origWidth = options.outWidth
-            val origHeight = options.outHeight
-
-            if (origWidth <= 0 || origHeight <= 0) return null
-
-            // 2. Calculate inSampleSize
-            val maxDimension = 1920
-            var sampleSize = 1
-            if (origWidth > maxDimension || origHeight > maxDimension) {
-                val halfWidth = origWidth / 2
-                val halfHeight = origHeight / 2
-                while ((halfWidth / sampleSize) >= maxDimension || (halfHeight / sampleSize) >= maxDimension) {
-                    sampleSize *= 2
-                }
+            if (!name.isNullOrBlank()) {
+                formBuilder.add("name", name)
             }
 
-            // 3. Decode bitmap with sampleSize
-            inputStream = contentResolver.openInputStream(uri)
-            val decodeOptions = BitmapFactory.Options().apply {
-                inSampleSize = sampleSize
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            }
-            val originalBitmap = BitmapFactory.decodeStream(inputStream, null, decodeOptions)
-            inputStream?.close()
+            val request = Request.Builder()
+                .url("https://api.imgbb.com/1/upload")
+                .post(formBuilder.build())
+                .build()
 
-            if (originalBitmap == null) return null
+            val response = client.newCall(request).execute()
+            val bodyString = response.body?.string() ?: ""
 
-            // 4. Scale down if necessary
-            val bitmapToCompress = if (originalBitmap.width > maxDimension || originalBitmap.height > maxDimension) {
-                val ratio = Math.min(
-                    maxDimension.toFloat() / originalBitmap.width,
-                    maxDimension.toFloat() / originalBitmap.height
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(
+                    IllegalStateException("ImgBB upload failed with HTTP ${response.code}: $bodyString")
                 )
-                val newWidth = Math.round(originalBitmap.width * ratio)
-                val newHeight = Math.round(originalBitmap.height * ratio)
-                val scaled = Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
-                if (scaled != originalBitmap) {
-                    originalBitmap.recycle()
-                }
-                scaled
-            } else {
-                originalBitmap
             }
 
-            // 5. Compress to JPEG
-            val baos = ByteArrayOutputStream()
-            bitmapToCompress.compress(Bitmap.CompressFormat.JPEG, 82, baos)
-            val bytes = baos.toByteArray()
-            bitmapToCompress.recycle()
-            bytes
-        } catch (_: Exception) {
-            null
+            val parsed = adapter.fromJson(bodyString)
+            val uploadedUrl = parsed?.data?.display_url ?: parsed?.data?.url
+            if (uploadedUrl != null) {
+                Result.success(uploadedUrl)
+            } else {
+                Result.failure(IllegalStateException("ImgBB response did not contain image URL"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

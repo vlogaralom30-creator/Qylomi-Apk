@@ -37,11 +37,17 @@ fun BrandedSplash(
     onSplashFinished: () -> Unit
 ) {
     val context = LocalContext.current
-    val animatorDurationScale = Settings.Global.getFloat(
-        context.contentResolver,
-        Settings.Global.ANIMATOR_DURATION_SCALE,
-        1.0f
-    )
+    val animatorDurationScale = remember {
+        try {
+            Settings.Global.getFloat(
+                context.contentResolver,
+                Settings.Global.ANIMATOR_DURATION_SCALE,
+                1.0f
+            )
+        } catch (_: Throwable) {
+            1.0f
+        }
+    }
 
     val isAnimationEnabled = animatorDurationScale > 0
 
@@ -120,27 +126,33 @@ fun BrandedSplash(
         }
         
         // Wait for ready signal or 3s hard timeout from start
-        val maxWait = 3000L - (System.currentTimeMillis() - startTime)
+        val maxWait = (3000L - (System.currentTimeMillis() - startTime)).coerceAtLeast(0L)
         if (maxWait > 0) {
-            withTimeoutOrNull(maxWait) {
-                snapshotFlow { currentIsReady }.filter { it }.first()
-            }
+            try {
+                withTimeoutOrNull(maxWait) {
+                    snapshotFlow { currentIsReady }.filter { it }.first()
+                }
+            } catch (_: Throwable) {}
         }
         
         // Enforce min 1.4s only if animations are enabled
         val elapsed = System.currentTimeMillis() - startTime
         if (isAnimationEnabled && elapsed < 1400) {
-            delay(1400 - elapsed)
+            try {
+                delay(1400 - elapsed)
+            } catch (_: Throwable) {}
         }
         
         startExit = true
-        if (isAnimationEnabled) {
-            launch { exitScale.animateTo(1.15f, tween(300, easing = FastOutSlowInEasing)) }
-            exitAlpha.animateTo(0f, tween(300))
-        } else {
-            exitScale.snapTo(1.15f)
-            exitAlpha.snapTo(0f)
-        }
+        try {
+            if (isAnimationEnabled) {
+                launch { exitScale.animateTo(1.15f, tween(300, easing = FastOutSlowInEasing)) }
+                exitAlpha.animateTo(0f, tween(300))
+            } else {
+                exitScale.snapTo(1.15f)
+                exitAlpha.snapTo(0f)
+            }
+        } catch (_: Throwable) {}
         onSplashFinished()
     }
 

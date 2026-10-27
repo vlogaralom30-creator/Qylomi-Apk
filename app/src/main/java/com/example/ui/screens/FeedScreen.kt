@@ -94,6 +94,7 @@ fun FeedScreen(
     onOpenReels: ((Post) -> Unit)? = null,
     onOpenMenu: ((Post) -> Unit)? = null,
     onLikersClick: ((Post) -> Unit)? = null,
+    onRelayClick: ((Post) -> Unit)? = null,
     feedError: String? = null,
     onRetryFeed: () -> Unit = onRefresh
 ) {
@@ -377,7 +378,8 @@ fun FeedScreen(
                             onDeletePostClick = onDeletePostClick,
                             onOpenReels = onOpenReels,
                             onOpenMenu = onOpenMenu,
-                            onLikersClick = onLikersClick
+                            onLikersClick = onLikersClick,
+                            onRelayClick = onRelayClick
                         )
                     }
                 }

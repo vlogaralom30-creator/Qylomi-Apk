@@ -1,13 +1,13 @@
 package com.example.ui.screens.series
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -16,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +26,7 @@ import com.example.data.model.SeriesCard
 import com.example.data.model.ShelfWithItems
 import com.example.data.repository.SeriesRepository
 import com.example.ui.components.SeriesCardItem
+import com.example.ui.components.series.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -56,7 +56,6 @@ fun SeriesListScreen(
     val shelf = shelfWithItems?.shelf
     val title = shelf?.title ?: "Browse Series"
 
-    // Parse pre-filter from config
     val initialGenre = remember(shelf?.config) {
         shelf?.config?.get("genre") as? String
     }
@@ -87,7 +86,6 @@ fun SeriesListScreen(
     val languagesList = listOf("All", "Hindi", "Japanese", "English", "Bangla", "Tamil", "Telugu")
     val statusesList = listOf("All", "ongoing", "completed", "upcoming")
 
-    // Function to reload items with current filters
     fun loadItems(reset: Boolean = false) {
         scope.launch {
             if (reset) {
@@ -112,11 +110,7 @@ fun SeriesListScreen(
 
             if (res.isSuccess) {
                 val cards = res.getOrNull() ?: emptyList()
-                if (reset) {
-                    itemsList = cards
-                } else {
-                    itemsList = itemsList + cards
-                }
+                itemsList = if (reset) cards else itemsList + cards
                 hasMore = cards.size >= pageSize
                 offset += cards.size
             }
@@ -134,154 +128,251 @@ fun SeriesListScreen(
             .background(QBackground)
             .testTag("series_list_screen")
     ) {
-        // Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(QSurface)
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Top App Bar
+        Surface(
+            color = QSurface,
+            shadowElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = QOnSurface)
-            }
-            Spacer(modifier = Modifier.width(6.dp))
-            Column {
-                Text(
-                    text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = QOnSurface
-                )
-                Text(
-                    text = "${itemsList.size} titles",
-                    fontSize = 11.sp,
-                    color = QOnSurfaceVariant
-                )
-            }
-        }
-
-        // Filters Bar (Horizontal scrolling chips)
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(QSurface)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Sort Dropdown button
-            item {
-                var sortExpanded by remember { mutableStateOf(false) }
-                Box {
-                    AssistChip(
-                        onClick = { sortExpanded = true },
-                        label = { Text("Sort: ${selectedSort.label}", fontSize = 12.sp) },
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = AssistChipDefaults.assistChipColors(containerColor = QSurfaceVariant)
-                    )
-                    DropdownMenu(
-                        expanded = sortExpanded,
-                        onDismissRequest = { sortExpanded = false },
-                        modifier = Modifier.background(QSurface)
-                    ) {
-                        SeriesSortOption.values().forEach { opt ->
-                            DropdownMenuItem(
-                                text = { Text(opt.label, color = QOnSurface, fontSize = 13.sp) },
-                                onClick = {
-                                    selectedSort = opt
-                                    sortExpanded = false
-                                }
-                            )
-                        }
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = QOnSurface)
                 }
-            }
-
-            // Genre Dropdown
-            item {
-                var genreExpanded by remember { mutableStateOf(false) }
-                Box {
-                    AssistChip(
-                        onClick = { genreExpanded = true },
-                        label = { Text(if (selectedGenre.isNullOrBlank() || selectedGenre == "All") "Genre" else selectedGenre!!, fontSize = 12.sp) },
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (selectedGenre != null && selectedGenre != "All") QYellowPrimary.copy(alpha = 0.2f) else QSurfaceVariant
-                        )
+                Spacer(modifier = Modifier.width(6.dp))
+                Column {
+                    Text(
+                        text = title,
+                        style = SeriesTypography.headline.copy(fontSize = 18.sp),
+                        color = QOnSurface
                     )
-                    DropdownMenu(
-                        expanded = genreExpanded,
-                        onDismissRequest = { genreExpanded = false },
-                        modifier = Modifier.background(QSurface)
-                    ) {
-                        genresList.forEach { g ->
-                            DropdownMenuItem(
-                                text = { Text(g, color = QOnSurface, fontSize = 13.sp) },
-                                onClick = {
-                                    selectedGenre = if (g == "All") null else g
-                                    genreExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Status Dropdown
-            item {
-                var statusExpanded by remember { mutableStateOf(false) }
-                Box {
-                    AssistChip(
-                        onClick = { statusExpanded = true },
-                        label = { Text(if (selectedStatus.isNullOrBlank() || selectedStatus == "All") "Status" else selectedStatus!!.replaceFirstChar { it.uppercase() }, fontSize = 12.sp) },
-                        trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = if (selectedStatus != null && selectedStatus != "All") QYellowPrimary.copy(alpha = 0.2f) else QSurfaceVariant
-                        )
+                    Text(
+                        text = "${itemsList.size} titles loaded",
+                        style = SeriesTypography.micro,
+                        color = QOnSurfaceVariant
                     )
-                    DropdownMenu(
-                        expanded = statusExpanded,
-                        onDismissRequest = { statusExpanded = false },
-                        modifier = Modifier.background(QSurface)
-                    ) {
-                        statusesList.forEach { s ->
-                            DropdownMenuItem(
-                                text = { Text(s.replaceFirstChar { it.uppercase() }, color = QOnSurface, fontSize = 13.sp) },
-                                onClick = {
-                                    selectedStatus = if (s == "All") null else s
-                                    statusExpanded = false
-                                }
-                            )
-                        }
-                    }
                 }
             }
         }
 
-        // Grid Content (3 columns)
+        // Sticky Filter Chips Row
+        Surface(
+            color = QSurface,
+            border = BorderStroke(0.5.dp, QCardBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            LazyRow(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Sort Chip
+                item {
+                    var sortExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Surface(
+                            onClick = { sortExpanded = true },
+                            shape = SeriesTokens.shapePill,
+                            color = QSurfaceVariant,
+                            border = BorderStroke(0.5.dp, QCardBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Sort: ${selectedSort.label}", style = SeriesTypography.micro, fontWeight = FontWeight.Bold, color = QOnSurface)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = QOnSurfaceVariant, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = sortExpanded,
+                            onDismissRequest = { sortExpanded = false },
+                            modifier = Modifier.background(QSurface)
+                        ) {
+                            SeriesSortOption.values().forEach { opt ->
+                                DropdownMenuItem(
+                                    text = { Text(opt.label, color = QOnSurface, style = SeriesTypography.label) },
+                                    onClick = {
+                                        selectedSort = opt
+                                        sortExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Genre Chip
+                item {
+                    var genreExpanded by remember { mutableStateOf(false) }
+                    val isFiltered = selectedGenre != null && selectedGenre != "All"
+                    Box {
+                        Surface(
+                            onClick = { genreExpanded = true },
+                            shape = SeriesTokens.shapePill,
+                            color = if (isFiltered) QYellowPrimary else QSurfaceVariant,
+                            border = BorderStroke(0.5.dp, if (isFiltered) QYellowPrimary else QCardBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isFiltered) selectedGenre!! else "Genre",
+                                    style = SeriesTypography.micro,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isFiltered) QOnYellow else QOnSurface
+                                )
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = if (isFiltered) QOnYellow else QOnSurfaceVariant, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = genreExpanded,
+                            onDismissRequest = { genreExpanded = false },
+                            modifier = Modifier.background(QSurface)
+                        ) {
+                            genresList.forEach { g ->
+                                DropdownMenuItem(
+                                    text = { Text(g, color = QOnSurface, style = SeriesTypography.label) },
+                                    onClick = {
+                                        selectedGenre = if (g == "All") null else g
+                                        genreExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Language Chip
+                item {
+                    var langExpanded by remember { mutableStateOf(false) }
+                    val isFiltered = selectedLanguage != null && selectedLanguage != "All"
+                    Box {
+                        Surface(
+                            onClick = { langExpanded = true },
+                            shape = SeriesTokens.shapePill,
+                            color = if (isFiltered) QYellowPrimary else QSurfaceVariant,
+                            border = BorderStroke(0.5.dp, if (isFiltered) QYellowPrimary else QCardBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isFiltered) selectedLanguage!! else "Language",
+                                    style = SeriesTypography.micro,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isFiltered) QOnYellow else QOnSurface
+                                )
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = if (isFiltered) QOnYellow else QOnSurfaceVariant, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = langExpanded,
+                            onDismissRequest = { langExpanded = false },
+                            modifier = Modifier.background(QSurface)
+                        ) {
+                            languagesList.forEach { l ->
+                                DropdownMenuItem(
+                                    text = { Text(l, color = QOnSurface, style = SeriesTypography.label) },
+                                    onClick = {
+                                        selectedLanguage = if (l == "All") null else l
+                                        langExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Status Chip
+                item {
+                    var statusExpanded by remember { mutableStateOf(false) }
+                    val isFiltered = selectedStatus != null && selectedStatus != "All"
+                    Box {
+                        Surface(
+                            onClick = { statusExpanded = true },
+                            shape = SeriesTokens.shapePill,
+                            color = if (isFiltered) QYellowPrimary else QSurfaceVariant,
+                            border = BorderStroke(0.5.dp, if (isFiltered) QYellowPrimary else QCardBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isFiltered) selectedStatus!!.replaceFirstChar { it.uppercase() } else "Status",
+                                    style = SeriesTypography.micro,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isFiltered) QOnYellow else QOnSurface
+                                )
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = if (isFiltered) QOnYellow else QOnSurfaceVariant, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = statusExpanded,
+                            onDismissRequest = { statusExpanded = false },
+                            modifier = Modifier.background(QSurface)
+                        ) {
+                            statusesList.forEach { s ->
+                                DropdownMenuItem(
+                                    text = { Text(s.replaceFirstChar { it.uppercase() }, color = QOnSurface, style = SeriesTypography.label) },
+                                    onClick = {
+                                        selectedStatus = if (s == "All") null else s
+                                        statusExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Adaptive 3-Column Grid
         Box(modifier = Modifier.fillMaxSize()) {
             if (isLoading && itemsList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = QYellowPrimary)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    repeat(3) {
+                        SkeletonRow()
+                    }
                 }
             } else if (itemsList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No series found matching current filters.", color = QOnSurfaceVariant, fontSize = 14.sp)
-                }
+                SeriesEmptyState(
+                    icon = Icons.Default.FilterList,
+                    title = "No series found",
+                    description = "Try selecting different genres, languages or statuses.",
+                    actionText = "Reset Filters",
+                    onActionClick = {
+                        selectedGenre = null
+                        selectedLanguage = null
+                        selectedStatus = null
+                    },
+                    modifier = Modifier.align(Alignment.Center)
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(itemsList.chunked(3)) { rowItems ->
+                    items(itemsList.chunked(3)) { rowCards ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            for (card in rowItems) {
+                            for (card in rowCards) {
                                 SeriesCardItem(
                                     card = card,
                                     isInWatchlist = watchlistIds.contains(card.id),
@@ -290,13 +381,13 @@ fun SeriesListScreen(
                                     modifier = Modifier.weight(1f)
                                 )
                             }
-                            repeat(3 - rowItems.size) {
+                            repeat(3 - rowCards.size) {
                                 Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
 
-                    // Load More Button
+                    // Load More Pill Button
                     if (hasMore) {
                         item {
                             Box(
@@ -308,13 +399,10 @@ fun SeriesListScreen(
                                 if (isLoading) {
                                     CircularProgressIndicator(color = QYellowPrimary, modifier = Modifier.size(24.dp))
                                 } else {
-                                    OutlinedButton(
-                                        onClick = { loadItems(reset = false) },
-                                        shape = RoundedCornerShape(20.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = QOnSurface)
-                                    ) {
-                                        Text("Load more")
-                                    }
+                                    GhostPillButton(
+                                        text = "Load more titles",
+                                        onClick = { loadItems(reset = false) }
+                                    )
                                 }
                             }
                         }

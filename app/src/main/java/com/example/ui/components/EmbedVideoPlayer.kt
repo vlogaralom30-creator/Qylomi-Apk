@@ -198,6 +198,15 @@ fun EmbedVideoPlayer(
                                     ) {
                                         hasError = true
                                     }
+
+                                    override fun onRenderProcessGone(
+                                        view: WebView?,
+                                        detail: android.webkit.RenderProcessGoneDetail?
+                                    ): Boolean {
+                                        view?.destroy()
+                                        hasError = true
+                                        return true
+                                    }
                                 }
 
                                 val htmlContent = """
@@ -225,6 +234,14 @@ fun EmbedVideoPlayer(
 
                                 loadDataWithBaseURL(baseUrl, htmlContent, "text/html", "utf-8", null)
                             }
+                        },
+                        onRelease = { webView ->
+                            try {
+                                webView.stopLoading()
+                                webView.loadUrl("about:blank")
+                                (webView.parent as? ViewGroup)?.removeView(webView)
+                                webView.destroy()
+                            } catch (_: Exception) {}
                         },
                         modifier = Modifier.fillMaxSize()
                     )

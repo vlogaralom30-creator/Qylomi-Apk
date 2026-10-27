@@ -35,7 +35,7 @@ object MediaResolver {
     private val backgroundSemaphore = Semaphore(2)
 
     val defaultTikTokHeaders = mapOf(
-        "Referer" to "https://www.tikwm.com/",
+        "Referer" to "https://www.tiktok.com/",
         "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     )
 

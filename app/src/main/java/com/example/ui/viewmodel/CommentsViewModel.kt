@@ -116,13 +116,29 @@ class CommentsViewModel(application: Application) : AndroidViewModel(application
         val parent = _replyToComment.value
         val parentId = parent?.id
         val user = repository.currentUser.value ?: return
+        val tempId = "temp_${System.currentTimeMillis()}"
+
+        val optimisticComment = Comment(
+            id = tempId,
+            postId = post.id,
+            userId = user.id,
+            content = text.trim(),
+            parentId = parentId,
+            authorProfile = user,
+            createdAt = java.time.Instant.now().toString(),
+            likesCount = 0,
+            isLikedByMe = false
+        )
+
+        // Optimistically insert
+        _comments.value = _comments.value + optimisticComment
+        _replyToComment.value = null
 
         viewModelScope.launch {
             val res = repository.addComment(post.id, text.trim())
             res.onSuccess { newComment ->
                 val enriched = newComment.copy(parentId = parentId, authorProfile = user)
-                _comments.value = _comments.value + enriched
-                _replyToComment.value = null
+                _comments.value = _comments.value.map { if (it.id == tempId) enriched else it }
 
                 // Send notification
                 val recipientId = parent?.userId ?: post.userId
@@ -131,6 +147,8 @@ class CommentsViewModel(application: Application) : AndroidViewModel(application
 
                 onDone(true, null)
             }.onFailure { e ->
+                // Roll back optimistic insertion
+                _comments.value = _comments.value.filter { it.id != tempId }
                 onDone(false, e.localizedMessage ?: "Failed to send comment")
             }
         }

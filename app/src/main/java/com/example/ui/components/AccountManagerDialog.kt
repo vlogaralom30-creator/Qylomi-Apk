@@ -188,7 +188,7 @@ fun AccountManagerBottomSheet(
                                         )
                                         Spacer(modifier = Modifier.width(3.dp))
                                         Text(
-                                            text = LocalAccountRepository.maskPassword(account.pass),
+                                            text = "Saved Credentials",
                                             fontSize = 11.sp,
                                             color = QOnSurfaceVariant,
                                             fontWeight = FontWeight.Bold

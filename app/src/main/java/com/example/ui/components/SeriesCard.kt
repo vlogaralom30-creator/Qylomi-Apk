@@ -1,8 +1,9 @@
 package com.example.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,12 +18,14 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -35,11 +38,15 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.ContinueWatchingItem
 import com.example.data.model.SeriesCard
+import com.example.ui.components.series.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
+/**
+ * Golden Cinema 2:3 Series Card Item
+ */
 @Composable
 fun SeriesCardItem(
     card: SeriesCard,
@@ -48,138 +55,137 @@ fun SeriesCardItem(
     onWatchlistClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isNew = remember(card.lastEpisodeAt) {
-        isWithin7Days(card.lastEpisodeAt)
+    val isNew = remember(card.lastEpisodeAt, card.createdAt) {
+        isWithin7Days(card.lastEpisodeAt ?: card.createdAt)
     }
 
     Column(
         modifier = modifier
-            .width(130.dp)
-            .clickable { onCardClick() }
+            .width(135.dp)
+            .pressScale(onClick = onCardClick)
             .testTag("series_card_${card.id}")
     ) {
-        // Poster (2:3 Aspect Ratio)
+        // 2:3 Poster Card with 20dp radii and thin border
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(SeriesTokens.shapeCard)
                 .background(QSurfaceVariant)
-                .border(0.5.dp, QCardBorder, RoundedCornerShape(10.dp))
+                .border(0.75.dp, QCardBorder, SeriesTokens.shapeCard)
+                .shadow(elevation = 4.dp, shape = SeriesTokens.shapeCard, ambientColor = SeriesTokens.GoldGlow, spotColor = SeriesTokens.GoldGlow)
         ) {
-            AsyncImage(
-                model = card.posterUrl,
-                contentDescription = card.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+            PosterImage(
+                posterUrl = card.posterUrl,
+                bannerUrl = card.bannerUrl,
+                title = card.title,
+                modifier = Modifier.fillMaxSize(),
+                shape = SeriesTokens.shapeCard
             )
 
             // Top Badges Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(6.dp),
+                    .padding(8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                // Left badge: NEW or 18+
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (isNew) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(QYellowDark)
-                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = QYellowPrimary,
+                            shadowElevation = 2.dp
                         ) {
                             Text(
                                 text = "NEW",
-                                fontSize = 9.sp,
+                                style = SeriesTypography.micro.copy(fontSize = 9.sp),
                                 fontWeight = FontWeight.Black,
-                                color = Color.Black
+                                color = QOnYellow,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                     }
                     if (card.isMature) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFD32F2F))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFD32F2F)
                         ) {
                             Text(
                                 text = "18+",
-                                fontSize = 9.sp,
+                                style = SeriesTypography.micro.copy(fontSize = 9.sp),
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                             )
                         }
                     }
                 }
 
-                // Watchlist toggle button
+                // Bookmark Icon Button
                 IconButton(
                     onClick = onWatchlistClick,
                     modifier = Modifier
-                        .size(28.dp)
+                        .size(30.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.5f))
+                        .background(Color.Black.copy(alpha = 0.55f))
                         .testTag("watchlist_button_${card.id}")
                 ) {
                     Icon(
-                        imageVector = if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        imageVector = if (isInWatchlist) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
                         contentDescription = "Watchlist",
                         tint = if (isInWatchlist) QYellowPrimary else Color.White,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }
 
-            // Bottom Gradient with Rating & Language
+            // Bottom Gradient Scrim with Rating and Language
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
                         )
                     )
-                    .padding(horizontal = 6.dp, vertical = 6.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Rating
-                    if ((card.rating ?: 0.0) > 0.0) {
+                    val score = card.avgUserRating?.takeIf { it > 0 } ?: card.rating ?: 0.0
+                    if (score > 0.0) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
                                 tint = QYellowPrimary,
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier.size(13.dp)
                             )
-                            Spacer(modifier = Modifier.width(2.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = String.format("%.1f", card.rating),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                text = String.format("%.1f", score),
+                                color = Color.White,
+                                style = SeriesTypography.micro,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     } else {
                         Spacer(modifier = Modifier.width(1.dp))
                     }
 
-                    // First language or "Sub"
                     val lang = card.languages.firstOrNull()
                     if (!lang.isNullOrBlank()) {
                         Text(
                             text = lang.take(5),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.8f)
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = SeriesTypography.micro.copy(fontSize = 9.sp),
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
@@ -191,16 +197,18 @@ fun SeriesCardItem(
         // Title
         Text(
             text = card.title,
-            fontSize = 12.sp,
+            style = SeriesTypography.label,
             fontWeight = FontWeight.SemiBold,
             color = QOnSurface,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            lineHeight = 15.sp
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
+/**
+ * Top 10 Card Item with big stylized outlined numerals behind poster
+ */
 @Composable
 fun Top10SeriesCardItem(
     rank: Int,
@@ -212,16 +220,16 @@ fun Top10SeriesCardItem(
 ) {
     Box(
         modifier = modifier
-            .width(160.dp)
-            .clickable { onCardClick() }
+            .width(170.dp)
             .testTag("top10_card_${card.id}")
     ) {
-        // Large stylized rank number behind/beside poster
+        // Large stylized rank number behind poster
         Text(
             text = "$rank",
-            fontSize = 72.sp,
+            fontSize = 84.sp,
             fontWeight = FontWeight.Black,
             color = QYellowPrimary.copy(alpha = 0.35f),
+            lineHeight = 84.sp,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .offset(x = (-4).dp, y = (4).dp)
@@ -236,12 +244,15 @@ fun Top10SeriesCardItem(
                 isInWatchlist = isInWatchlist,
                 onCardClick = onCardClick,
                 onWatchlistClick = onWatchlistClick,
-                modifier = Modifier.width(125.dp)
+                modifier = Modifier.width(128.dp)
             )
         }
     }
 }
 
+/**
+ * Continue Watching Card (Wide 16:9 with progress bar and remaining time)
+ */
 @Composable
 fun ContinueWatchingCard(
     item: ContinueWatchingItem,
@@ -253,21 +264,26 @@ fun ContinueWatchingCard(
         if (dur > 0) (item.positionSec.toFloat() / dur.toFloat()).coerceIn(0f, 1f) else 0f
     }
 
+    val remainingMinutes = remember(item.positionSec, item.durationSec) {
+        val dur = item.durationSec ?: 0
+        if (dur > item.positionSec) ((dur - item.positionSec) / 60).coerceAtLeast(1) else 0
+    }
+
     val s = item.series
     val ep = item.episode
     val idTag = ep?.id ?: s?.id ?: "unknown"
 
     Card(
-        shape = RoundedCornerShape(10.dp),
+        shape = SeriesTokens.shapeCard,
         colors = CardDefaults.cardColors(containerColor = QSurface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
+        border = BorderStroke(1.dp, QCardBorder),
         modifier = modifier
-            .width(200.dp)
-            .clickable { onClick() }
+            .width(220.dp)
+            .pressScale(onClick = onClick)
             .testTag("continue_watching_$idTag")
     ) {
         Column {
-            // Thumbnail (16:9)
+            // 16:9 Thumbnail
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -281,13 +297,14 @@ fun ContinueWatchingCard(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Play icon overlay
+                // Play icon overlay with golden glow
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .border(1.dp, QYellowPrimary.copy(alpha = 0.6f), CircleShape)
                         .align(Alignment.Center)
                 ) {
                     Icon(
@@ -298,7 +315,7 @@ fun ContinueWatchingCard(
                     )
                 }
 
-                // Progress Bar at Bottom
+                // Progress Bar at bottom
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier
@@ -306,31 +323,47 @@ fun ContinueWatchingCard(
                         .height(3.dp)
                         .align(Alignment.BottomCenter),
                     color = QYellowPrimary,
-                    trackColor = Color.White.copy(alpha = 0.3f),
+                    trackColor = Color.White.copy(alpha = 0.3f)
                 )
             }
 
-            Column(modifier = Modifier.padding(8.dp)) {
+            Column(modifier = Modifier.padding(10.dp)) {
                 Text(
                     text = s?.title ?: "Series",
-                    fontSize = 12.sp,
+                    style = SeriesTypography.label,
                     fontWeight = FontWeight.Bold,
                     color = QOnSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(
-                    text = "S${ep?.seasonNumber ?: 1} E${ep?.episodeNumber ?: 1}: ${ep?.title ?: "Episode"}",
-                    fontSize = 11.sp,
-                    color = QOnSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "S${ep?.seasonNumber ?: 1}:E${ep?.episodeNumber ?: 1}",
+                        style = SeriesTypography.micro,
+                        fontWeight = FontWeight.SemiBold,
+                        color = QYellowDark
+                    )
+                    if (remainingMinutes > 0) {
+                        Text(
+                            text = "$remainingMinutes min left",
+                            style = SeriesTypography.micro,
+                            color = QOnSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+/**
+ * Premium Hero Carousel with Segmented Story Bars and Glass Info Panel
+ */
 @Composable
 fun HeroCarousel(
     items: List<SeriesCard>,
@@ -345,7 +378,7 @@ fun HeroCarousel(
     val pagerState = rememberPagerState(pageCount = { items.size })
     var isUserInteracting by remember { mutableStateOf(false) }
 
-    // Auto-slide every 5 seconds
+    // Auto-advance 5 seconds, paused on touch
     LaunchedEffect(pagerState, isUserInteracting) {
         while (true) {
             delay(5000)
@@ -359,7 +392,7 @@ fun HeroCarousel(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(280.dp)
+            .height(310.dp)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -375,23 +408,21 @@ fun HeroCarousel(
             modifier = Modifier.fillMaxSize()
         ) { page ->
             val series = items[page]
-            val hasBanner = !series.bannerUrl.isNullOrBlank()
+            val banner = series.bannerUrl?.takeIf { it.isNotBlank() }
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .clickable { onCardClick(series) }
             ) {
-                // Background image: banner or blurred poster fallback
-                if (hasBanner) {
+                if (banner != null) {
                     AsyncImage(
-                        model = series.bannerUrl,
+                        model = banner,
                         contentDescription = series.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    // Blurred poster fallback + sharp poster
                     AsyncImage(
                         model = series.posterUrl,
                         contentDescription = null,
@@ -400,20 +431,19 @@ fun HeroCarousel(
                             .fillMaxSize()
                             .blur(20.dp)
                     )
-                    // Sharp poster in center-end
                     AsyncImage(
                         model = series.posterUrl,
                         contentDescription = series.title,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .padding(end = 20.dp, top = 20.dp, bottom = 40.dp)
+                            .padding(end = 20.dp, top = 20.dp, bottom = 60.dp)
                             .aspectRatio(2f / 3f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(SeriesTokens.shapeCard)
                     )
                 }
 
-                // Dark gradient overlay for readable text
+                // Dark gradient scrim
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -428,46 +458,39 @@ fun HeroCarousel(
                         )
                 )
 
-                // Hero Content at bottom
+                // Glass info panel with title, rating, genres, Play and My List buttons
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(16.dp)
-                        .fillMaxWidth(0.75f)
+                        .padding(horizontal = 16.dp, vertical = 20.dp)
+                        .fillMaxWidth(0.82f)
                 ) {
-                    // Genres / Category chips
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         series.genres.take(2).forEach { genre ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color.White.copy(alpha = 0.2f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            Surface(
+                                shape = SeriesTokens.shapeChip,
+                                color = Color.White.copy(alpha = 0.2f)
                             ) {
                                 Text(
                                     text = genre,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color.White
+                                    style = SeriesTypography.micro,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
                         }
 
-                        if ((series.rating ?: 0.0) > 0.0) {
+                        val score = series.avgUserRating?.takeIf { it > 0 } ?: series.rating ?: 0.0
+                        if (score > 0.0) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = QYellowPrimary,
-                                    modifier = Modifier.size(13.dp)
-                                )
+                                Icon(Icons.Default.Star, contentDescription = null, tint = QYellowPrimary, modifier = Modifier.size(13.dp))
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = String.format("%.1f", series.rating),
-                                    fontSize = 11.sp,
+                                    text = String.format("%.1f", score),
+                                    style = SeriesTypography.micro,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
@@ -479,8 +502,8 @@ fun HeroCarousel(
 
                     Text(
                         text = series.title,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        style = SeriesTypography.headline.copy(fontSize = 20.sp),
+                        fontWeight = FontWeight.Black,
                         color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -488,67 +511,65 @@ fun HeroCarousel(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Buttons: Play and + My List
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
+                        YellowPillButton(
+                            text = "Play",
+                            icon = Icons.Default.PlayArrow,
                             onClick = { onPlayClick(series) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = QYellowPrimary,
-                                contentColor = QOnYellow
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("hero_play_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Play", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
+                            modifier = Modifier
+                                .height(40.dp)
+                                .testTag("hero_play_button")
+                        )
 
                         val inList = isInWatchlist(series.id)
                         OutlinedButton(
                             onClick = { onWatchlistToggle(series) },
-                            shape = RoundedCornerShape(20.dp),
+                            shape = SeriesTokens.shapePill,
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = if (inList) QYellowPrimary else Color.White
                             ),
-                            border = androidx.compose.foundation.BorderStroke(
+                            border = BorderStroke(
                                 1.dp,
                                 if (inList) QYellowPrimary else Color.White.copy(alpha = 0.7f)
                             ),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                            modifier = Modifier.testTag("hero_watchlist_button")
+                            modifier = Modifier.height(40.dp)
                         ) {
                             Icon(
-                                imageVector = if (inList) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                imageVector = if (inList) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
                                 contentDescription = null,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (inList) "In List" else "+ My List", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text(if (inList) "In List" else "+ My List", style = SeriesTypography.label)
                         }
                     }
                 }
             }
         }
 
-        // Pager indicator dots at bottom center
+        // Story-Style Segmented Progress Bars at the bottom
         Row(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             repeat(items.size) { index ->
-                val isSelected = pagerState.currentPage == index
+                val isCurrent = pagerState.currentPage == index
                 Box(
                     modifier = Modifier
-                        .size(if (isSelected) 8.dp else 5.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) QYellowPrimary else Color.White.copy(alpha = 0.4f))
+                        .weight(1f)
+                        .height(3.dp)
+                        .clip(SeriesTokens.shapePill)
+                        .background(
+                            if (isCurrent) QYellowPrimary
+                            else Color.White.copy(alpha = 0.3f)
+                        )
                 )
             }
         }

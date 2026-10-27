@@ -90,7 +90,6 @@ class SocialRepository(
                     list.add(
                         SavedAccount(
                             email = obj.optString("email", ""),
-                            pass = obj.optString("pass", ""),
                             displayName = obj.optString("displayName", ""),
                             username = obj.optString("username", ""),
                             avatarUrl = if (obj.has("avatarUrl") && !obj.isNull("avatarUrl")) obj.getString("avatarUrl") else null
@@ -107,14 +106,13 @@ class SocialRepository(
     }
 
     fun saveAccountCredential(email: String, pass: String, displayName: String, username: String, avatarUrl: String?) {
-        if (email.isBlank() || pass.isBlank()) return
+        if (email.isBlank()) return
         val currentList = _savedAccounts.value.toMutableList()
         currentList.removeAll { it.email.equals(email, ignoreCase = true) }
         currentList.add(
             0,
             SavedAccount(
                 email = email,
-                pass = pass,
                 displayName = displayName.ifBlank { email.substringBefore("@") },
                 username = username.ifBlank { email.substringBefore("@") },
                 avatarUrl = avatarUrl
@@ -136,7 +134,7 @@ class SocialRepository(
             list.forEach { item ->
                 val obj = JSONObject()
                 obj.put("email", item.email)
-                obj.put("pass", item.pass)
+                obj.put("pass", "")
                 obj.put("displayName", item.displayName)
                 obj.put("username", item.username)
                 if (item.avatarUrl != null) {

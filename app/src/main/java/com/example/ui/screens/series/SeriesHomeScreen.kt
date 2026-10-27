@@ -1,8 +1,7 @@
 package com.example.ui.screens.series
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,8 +15,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -34,6 +34,7 @@ import com.example.data.model.ContinueWatchingItem
 import com.example.data.model.SeriesCard
 import com.example.data.model.ShelfWithItems
 import com.example.ui.components.*
+import com.example.ui.components.series.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.SeriesViewModel
 
@@ -71,72 +72,85 @@ fun SeriesHomeScreen(
             .testTag("series_home_screen")
     ) {
         // 1. Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(QSurface)
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Surface(
+            color = QSurface,
+            shadowElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (isSearchActive) {
-                // Search Input Mode
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.setSearchQuery(it) },
-                    placeholder = { Text("Search anime, series, movies...", fontSize = 14.sp) },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = QOnSurfaceVariant)
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = {
-                            if (searchQuery.isNotEmpty()) {
-                                viewModel.setSearchQuery("")
-                            } else {
-                                isSearchActive = false
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (isSearchActive) {
+                    // Search Input Field
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.setSearchQuery(it) },
+                        placeholder = { Text("Search anime, series, movies...", style = SeriesTypography.body) },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = QOnSurfaceVariant)
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                if (searchQuery.isNotEmpty()) {
+                                    viewModel.setSearchQuery("")
+                                } else {
+                                    isSearchActive = false
+                                }
+                            }) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Close search", tint = QOnSurfaceVariant)
                             }
-                        }) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Close search", tint = QOnSurfaceVariant)
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = QSurfaceVariant,
-                        unfocusedContainerColor = QSurfaceVariant,
-                        focusedBorderColor = QYellowPrimary,
-                        unfocusedBorderColor = Color.Transparent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("series_search_input")
-                )
-            } else {
-                // Normal Header Mode
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onMenuClick,
-                        modifier = Modifier.testTag("series_menu_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Menu, contentDescription = "Menu", tint = QOnSurface)
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Series & Anime",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = QOnSurface,
-                        letterSpacing = (-0.5).sp
+                        },
+                        singleLine = true,
+                        shape = SeriesTokens.shapePill,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = QSurfaceVariant,
+                            unfocusedContainerColor = QSurfaceVariant,
+                            focusedBorderColor = QYellowPrimary,
+                            unfocusedBorderColor = Color.Transparent
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("series_search_input")
                     )
-                }
+                } else {
+                    // Golden Header
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onMenuClick,
+                            modifier = Modifier.testTag("series_menu_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Menu, contentDescription = "Menu", tint = QOnSurface)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Golden",
+                                style = SeriesTypography.headline,
+                                fontWeight = FontWeight.Black,
+                                color = QYellowDark
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Cinema",
+                                style = SeriesTypography.headline,
+                                fontWeight = FontWeight.Bold,
+                                color = QOnSurface
+                            )
+                        }
+                    }
 
-                IconButton(
-                    onClick = { isSearchActive = true },
-                    modifier = Modifier.testTag("series_search_button")
-                ) {
-                    Icon(imageVector = Icons.Default.Search, contentDescription = "Search catalog", tint = QOnSurface)
+                    IconButton(
+                        onClick = { isSearchActive = true },
+                        modifier = Modifier.testTag("series_search_button")
+                    ) {
+                        Icon(imageVector = Icons.Outlined.Search, contentDescription = "Search catalog", tint = QOnSurface)
+                    }
                 }
             }
         }
@@ -148,15 +162,11 @@ fun SeriesHomeScreen(
                 results = searchResults,
                 isSearching = isSearching,
                 isInWatchlist = { id -> watchlistIds.contains(id) },
-                onCardClick = { card ->
-                    onSeriesClick(card.slug)
-                },
-                onWatchlistToggle = { card ->
-                    viewModel.toggleWatchlist(card.id, onAuthRequired)
-                }
+                onCardClick = { card -> onSeriesClick(card.slug) },
+                onWatchlistToggle = { card -> viewModel.toggleWatchlist(card.id, onAuthRequired) }
             )
         } else {
-            // Normal Catalog View with Pull-To-Refresh
+            // Main Pull-To-Refresh Catalog
             PullToRefreshBox(
                 isRefreshing = isHomeRefreshing,
                 onRefresh = { viewModel.refresh() },
@@ -166,7 +176,7 @@ fun SeriesHomeScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 90.dp)
                 ) {
-                    // 2. Category Chips Bar
+                    // Category Chips Bar
                     item {
                         CategoryChipsRow(
                             categories = categories,
@@ -175,56 +185,46 @@ fun SeriesHomeScreen(
                         )
                     }
 
-                    // Loading Spinner
-                    if (isHomeLoading) {
+                    // Shimmer Skeletons while loading
+                    if (isHomeLoading && shelves.isEmpty()) {
                         item {
-                            Box(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(200.dp),
-                                contentAlignment = Alignment.Center
+                                    .padding(vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                CircularProgressIndicator(color = QYellowPrimary)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(280.dp)
+                                        .padding(horizontal = 16.dp)
+                                        .clip(SeriesTokens.shapeCard)
+                                        .shimmerEffect()
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                SkeletonRow()
+                                Spacer(modifier = Modifier.height(10.dp))
+                                SkeletonRow()
                             }
                         }
                     }
 
-                    // Error Banner
+                    // Error Banner with Retry
                     if (errorMessage != null && shelves.isEmpty()) {
                         item {
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = QSurface),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = errorMessage ?: "Failed to load series catalog",
-                                        color = QOnSurface,
-                                        fontSize = 14.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Button(
-                                        onClick = { viewModel.refresh() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow)
-                                    ) {
-                                        Text("Retry")
-                                    }
-                                }
-                            }
+                            SeriesErrorState(
+                                message = errorMessage ?: "Failed to load series catalog",
+                                onRetry = { viewModel.refresh() },
+                                modifier = Modifier.padding(32.dp)
+                            )
                         }
                     }
 
-                    // 3. Continue Watching Personal Row
+                    // 1. Continue Watching Personal Row
                     if (continueWatching.isNotEmpty()) {
                         item {
-                            ShelfHeader(title = "Continue Watching", onSeeAllClick = null)
+                            SectionHeader(title = "Continue Watching", onSeeAllClick = null)
                             LazyRow(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -244,10 +244,10 @@ fun SeriesHomeScreen(
                         }
                     }
 
-                    // 4. My List Personal Row
+                    // 2. My List Personal Row
                     if (watchlist.isNotEmpty()) {
                         item {
-                            ShelfHeader(title = "My List", onSeeAllClick = null)
+                            SectionHeader(title = "My List", onSeeAllClick = null)
                             LazyRow(
                                 contentPadding = PaddingValues(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -265,33 +265,18 @@ fun SeriesHomeScreen(
                         }
                     }
 
-                    // 5. Dynamic Shelves (strictly rendered by the response layout in order)
+                    // Empty Category State
                     if (shelves.isEmpty() && !isHomeLoading && errorMessage == null) {
                         item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "No series available in this category yet.",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = QOnSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Check back soon for new updates!",
-                                        fontSize = 12.sp,
-                                        color = QOnSurfaceVariant.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
+                            SeriesEmptyState(
+                                icon = Icons.Outlined.Tv,
+                                title = "No titles in this category",
+                                description = "Check back soon for new updates, or explore other categories!"
+                            )
                         }
                     }
 
+                    // 3. Dynamic Shelves by Layout
                     items(shelves, key = { it.shelf.id }) { shelfWithItems ->
                         val shelf = shelfWithItems.shelf
                         val items = shelfWithItems.items
@@ -310,7 +295,7 @@ fun SeriesHomeScreen(
                                 }
 
                                 "top10" -> {
-                                    ShelfHeader(
+                                    SectionHeader(
                                         title = shelf.title,
                                         onSeeAllClick = { onSeeAllClick(shelfWithItems) }
                                     )
@@ -328,11 +313,45 @@ fun SeriesHomeScreen(
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.height(18.dp))
                                 }
 
-                                else -> { // "row" or fallback
-                                    ShelfHeader(
+                                "grid" -> {
+                                    SectionHeader(
+                                        title = shelf.title,
+                                        onSeeAllClick = { onSeeAllClick(shelfWithItems) }
+                                    )
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        items.chunked(3).forEach { rowCards ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                rowCards.forEach { card ->
+                                                    SeriesCardItem(
+                                                        card = card,
+                                                        isInWatchlist = watchlistIds.contains(card.id),
+                                                        onCardClick = { onSeriesClick(card.slug) },
+                                                        onWatchlistClick = { viewModel.toggleWatchlist(card.id, onAuthRequired) },
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                }
+                                                repeat(3 - rowCards.size) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(18.dp))
+                                }
+
+                                else -> { // "row" or standard shelf
+                                    SectionHeader(
                                         title = shelf.title,
                                         onSeeAllClick = { onSeeAllClick(shelfWithItems) }
                                     )
@@ -349,7 +368,7 @@ fun SeriesHomeScreen(
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Spacer(modifier = Modifier.height(18.dp))
                                 }
                             }
                         }
@@ -372,92 +391,43 @@ private fun CategoryChipsRow(
     ) {
         // "All" chip
         item {
-            FilterChip(
-                selected = selectedCategory == null,
+            val isSelected = selectedCategory == null
+            Surface(
                 onClick = { onCategorySelected(null) },
-                label = { Text("All", fontWeight = FontWeight.SemiBold) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = QYellowPrimary,
-                    selectedLabelColor = QOnYellow,
-                    containerColor = QSurface,
-                    labelColor = QOnSurface
-                ),
-                shape = RoundedCornerShape(20.dp),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selectedCategory == null,
-                    borderColor = QCardBorder,
-                    selectedBorderColor = QYellowPrimary
-                ),
-                modifier = Modifier.testTag("category_chip_all")
-            )
+                shape = SeriesTokens.shapePill,
+                color = if (isSelected) QYellowPrimary else QSurfaceVariant,
+                border = BorderStroke(0.75.dp, if (isSelected) QYellowPrimary else QCardBorder),
+                modifier = Modifier
+                    .pressScale(onClick = { onCategorySelected(null) })
+                    .testTag("category_chip_all")
+            ) {
+                Text(
+                    text = "All",
+                    style = SeriesTypography.label,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isSelected) QOnYellow else QOnSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
+                )
+            }
         }
 
         items(categories, key = { it.id }) { cat ->
             val isSelected = selectedCategory?.id == cat.id
-            FilterChip(
-                selected = isSelected,
+            Surface(
                 onClick = { onCategorySelected(cat) },
-                label = { Text(cat.name, fontWeight = FontWeight.SemiBold) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = QYellowPrimary,
-                    selectedLabelColor = QOnYellow,
-                    containerColor = QSurface,
-                    labelColor = QOnSurface
-                ),
-                shape = RoundedCornerShape(20.dp),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = isSelected,
-                    borderColor = QCardBorder,
-                    selectedBorderColor = QYellowPrimary
-                ),
-                modifier = Modifier.testTag("category_chip_${cat.slug}")
-            )
-        }
-    }
-}
-
-@Composable
-private fun ShelfHeader(
-    title: String,
-    onSeeAllClick: (() -> Unit)?
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.Bold,
-            color = QOnSurface
-        )
-
-        if (onSeeAllClick != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+                shape = SeriesTokens.shapePill,
+                color = if (isSelected) QYellowPrimary else QSurfaceVariant,
+                border = BorderStroke(0.75.dp, if (isSelected) QYellowPrimary else QCardBorder),
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onSeeAllClick() }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                    .testTag("see_all_$title")
+                    .pressScale(onClick = { onCategorySelected(cat) })
+                    .testTag("category_chip_${cat.slug}")
             ) {
                 Text(
-                    text = "See all",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = QYellowDark
-                )
-                Spacer(modifier = Modifier.width(2.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = QYellowDark,
-                    modifier = Modifier.size(13.dp)
+                    text = cat.name,
+                    style = SeriesTypography.label,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isSelected) QOnYellow else QOnSurface,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp)
                 )
             }
         }
@@ -482,18 +452,11 @@ private fun SearchResultsView(
                 CircularProgressIndicator(color = QYellowPrimary)
             }
         } else if (query.trim().length >= 2 && results.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No series matching \"$query\"",
-                    fontSize = 14.sp,
-                    color = QOnSurfaceVariant
-                )
-            }
+            SeriesEmptyState(
+                icon = Icons.Outlined.Search,
+                title = "No results found",
+                description = "We couldn't find any series matching \"$query\". Try checking for typos or searching another term."
+            )
         } else if (query.trim().length < 2) {
             Box(
                 modifier = Modifier
@@ -503,7 +466,7 @@ private fun SearchResultsView(
             ) {
                 Text(
                     text = "Type at least 2 characters to search...",
-                    fontSize = 14.sp,
+                    style = SeriesTypography.body,
                     color = QOnSurfaceVariant
                 )
             }
@@ -516,16 +479,15 @@ private fun SearchResultsView(
                 item {
                     Text(
                         text = "Found ${results.size} result${if (results.size == 1) "" else "s"}",
-                        fontSize = 13.sp,
+                        style = SeriesTypography.label,
                         color = QOnSurfaceVariant
                     )
                 }
 
-                // Grid layout with 3 items per row
                 items(results.chunked(3)) { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         for (card in rowItems) {
                             SeriesCardItem(
@@ -536,7 +498,6 @@ private fun SearchResultsView(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        // Filler space if row has less than 3
                         repeat(3 - rowItems.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }

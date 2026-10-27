@@ -1,15 +1,22 @@
 package com.example.ui.components
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.media.AudioManager
+import android.net.Uri
 import android.view.ViewGroup
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,26 +29,38 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import coil.compose.AsyncImage
+import com.example.ui.components.series.*
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -83,17 +102,27 @@ fun EpisodePlayerView(
     modifier: Modifier = Modifier,
     initialPositionSec: Int = 0,
     showSkipIntro: Boolean = false,
+    introStartSec: Int = 0,
     introEndSec: Int = 0,
     fallbackNotice: String? = null,
     autoplayCountdown: Int? = null,
     nextEpisodeTitle: String? = null,
+    episodeNumber: Int? = null,
+    episodeTitle: String? = null,
+    seriesTitle: String? = null,
+    backdropUrl: String? = null,
+    serverBadge: String? = null,
+    hasPrevEp: Boolean = false,
+    hasNextEp: Boolean = false,
     onPositionUpdate: (positionSec: Int, durationSec: Int) -> Unit = { _, _ -> },
     onVideoReady: (durationSec: Int) -> Unit = {},
     onError: (String) -> Unit = {},
     onEnded: () -> Unit = {},
     onSkipIntroClick: () -> Unit = {},
+    onPlayPrevClick: (() -> Unit)? = null,
     onPlayNextClick: () -> Unit = {},
     onCancelAutoplayClick: () -> Unit = {},
+    onRetrySource: (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -104,14 +133,31 @@ fun EpisodePlayerView(
 
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
+    var isFirstFrameRendered by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentPosSec by remember { mutableIntStateOf(initialPositionSec) }
     var totalDurationSec by remember { mutableIntStateOf(0) }
     var isFullscreen by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
     var isMuted by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var isFillMode by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
+    var showAspectMenu by remember { mutableStateOf(false) }
+    var isControlsLocked by remember { mutableStateOf(false) }
 
-    // Persistent ExoPlayer instance tied to Context lifecycle (prevents recreate & freeze)
+    // Scrubbing preview bubble
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubPosSec by remember { mutableIntStateOf(0) }
+
+    // Gesture indicator states
+    var gestureFeedbackText by remember { mutableStateOf<String?>(null) }
+    var showDoubleTapSeekLeft by remember { mutableStateOf(false) }
+    var showDoubleTapSeekRight by remember { mutableStateOf(false) }
+
+    // Audio Manager for volume gesture
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
+
     val exoPlayer = remember(context) {
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(context))
@@ -121,12 +167,54 @@ fun EpisodePlayerView(
             }
     }
 
-    // Safely update media item when URL changes (Fixes background audio & freeze)
+    // Fullscreen back handler
+    BackHandler(enabled = isFullscreen) {
+        isFullscreen = false
+    }
+
+    // Keep screen on while playing
+    DisposableEffect(activity, isPlaying) {
+        if (isPlaying) {
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // Fullscreen Immersive Mode & Orientation handling
+    DisposableEffect(isFullscreen, activity) {
+        val window = activity?.window
+        if (window != null) {
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            if (isFullscreen) {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose {
+            if (activity != null) {
+                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                activity.window?.let { win ->
+                    WindowCompat.getInsetsController(win, win.decorView).show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+        }
+    }
+
+    // Load media item
     LaunchedEffect(resolvedUrl) {
         if (resolvedUrl.isNotBlank()) {
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             isBuffering = true
+            isFirstFrameRendered = false
             errorMessage = null
             exoPlayer.setMediaItem(MediaItem.fromUri(resolvedUrl))
             exoPlayer.prepare()
@@ -137,10 +225,10 @@ fun EpisodePlayerView(
         }
     }
 
-    // Controls auto-hide timer
-    LaunchedEffect(showControls, isPlaying) {
-        if (showControls && isPlaying) {
-            delay(4000)
+    // Controls auto-hide timer (3s)
+    LaunchedEffect(showControls, isPlaying, isControlsLocked, isScrubbing) {
+        if (showControls && isPlaying && !isControlsLocked && !isScrubbing) {
+            delay(3000)
             showControls = false
         }
     }
@@ -148,18 +236,34 @@ fun EpisodePlayerView(
     // Position updates ticker
     LaunchedEffect(exoPlayer) {
         while (true) {
-            delay(500)
+            delay(300)
             if (exoPlayer.isPlaying || exoPlayer.playbackState == Player.STATE_READY) {
                 val pos = (exoPlayer.currentPosition / 1000).toInt()
                 val dur = (exoPlayer.duration / 1000).coerceAtLeast(0).toInt()
-                currentPosSec = pos
+                if (!isScrubbing) {
+                    currentPosSec = pos
+                }
                 totalDurationSec = dur
                 onPositionUpdate(pos, dur)
             }
         }
     }
 
-    // ExoPlayer & Lifecycle Binding
+    // Double-tap seek dismiss timers
+    LaunchedEffect(showDoubleTapSeekLeft) {
+        if (showDoubleTapSeekLeft) {
+            delay(600)
+            showDoubleTapSeekLeft = false
+        }
+    }
+    LaunchedEffect(showDoubleTapSeekRight) {
+        if (showDoubleTapSeekRight) {
+            delay(600)
+            showDoubleTapSeekRight = false
+        }
+    }
+
+    // Player event listener
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -170,6 +274,7 @@ fun EpisodePlayerView(
                     }
                     Player.STATE_READY -> {
                         isBuffering = false
+                        isFirstFrameRendered = true
                         errorMessage = null
                         val durSec = (exoPlayer.duration / 1000).coerceAtLeast(0).toInt()
                         totalDurationSec = durSec
@@ -220,12 +325,8 @@ fun EpisodePlayerView(
 
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE -> {
-                    exoPlayer.pause()
-                }
-                Lifecycle.Event.ON_RESUME -> {
-                    if (isPlaying) exoPlayer.play()
-                }
+                Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
+                Lifecycle.Event.ON_RESUME -> if (isPlaying) exoPlayer.play()
                 else -> {}
             }
         }
@@ -237,30 +338,108 @@ fun EpisodePlayerView(
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             exoPlayer.release()
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
+    val containerModifier = if (isFullscreen) {
+        Modifier.fillMaxSize()
+    } else {
+        modifier.fillMaxWidth().aspectRatio(16f / 9f)
+    }
+
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .background(QDarkObsidian)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                showControls = !showControls
+        modifier = containerModifier
+            .background(SeriesTokens.StageBlack)
+            .pointerInput(isFullscreen, isControlsLocked) {
+                detectTapGestures(
+                    onDoubleTap = { offset ->
+                        if (!isControlsLocked) {
+                            val width = size.width
+                            if (offset.x < width / 2) {
+                                val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
+                                exoPlayer.seekTo(newPos)
+                                showDoubleTapSeekLeft = true
+                            } else {
+                                val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
+                                exoPlayer.seekTo(newPos)
+                                showDoubleTapSeekRight = true
+                            }
+                        }
+                    },
+                    onTap = {
+                        showControls = !showControls
+                    },
+                    onLongPress = {
+                        if (!isControlsLocked) {
+                            exoPlayer.playbackParameters = PlaybackParameters(2.0f)
+                            gestureFeedbackText = "2x Fast Forward"
+                        }
+                    }
+                )
+            }
+            .pointerInput(isFullscreen, isControlsLocked) {
+                if (isFullscreen && !isControlsLocked) {
+                    detectDragGestures(
+                        onDragEnd = { gestureFeedbackText = null },
+                        onDragCancel = { gestureFeedbackText = null },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            val (x, _) = change.position
+                            val width = size.width
+                            if (x < width / 2) {
+                                // Left half: Brightness
+                                activity?.let { act ->
+                                    val lp = act.window.attributes
+                                    var currentB = if (lp.screenBrightness < 0f) 0.5f else lp.screenBrightness
+                                    currentB = (currentB - dragAmount.y / 600f).coerceIn(0.01f, 1f)
+                                    lp.screenBrightness = currentB
+                                    act.window.attributes = lp
+                                    gestureFeedbackText = "Brightness: ${(currentB * 100).toInt()}%"
+                                }
+                            } else {
+                                // Right half: Volume
+                                audioManager?.let { am ->
+                                    val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                    val currentVol = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                    val delta = if (dragAmount.y < 0) 1 else if (dragAmount.y > 0) -1 else 0
+                                    if (delta != 0) {
+                                        val newVol = (currentVol + delta).coerceIn(0, maxVol)
+                                        am.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
+                                        val pct = (newVol * 100) / maxVol
+                                        gestureFeedbackText = "Volume: $pct%"
+                                    }
+                                }
+                            }
+                        }
+                    )
+                }
             }
             .testTag("episode_player_container")
     ) {
-        // Player Surface View with active update binding
+        // Blurred backdrop until first frame is rendered
+        if (!isFirstFrameRendered && !backdropUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = backdropUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(20.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+            )
+        }
+
+        // ExoPlayer Surface View
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
                     useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    resizeMode = if (isFillMode) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -271,321 +450,574 @@ fun EpisodePlayerView(
                 if (playerView.player != exoPlayer) {
                     playerView.player = exoPlayer
                 }
+                playerView.resizeMode = if (isFillMode) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
             },
             modifier = Modifier.fillMaxSize()
         )
 
-        // Buffering & Loading Spinner Overlay
-        if (isBuffering && errorMessage == null) {
+        // Floating Gesture Feedback Badge (Brightness / Volume / 2x Speed)
+        if (gestureFeedbackText != null) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.8f),
+                    shape = SeriesTokens.shapePill,
+                    border = BorderStroke(1.dp, QYellowPrimary)
+                ) {
+                    Text(
+                        text = gestureFeedbackText ?: "",
+                        color = QYellowPrimary,
+                        style = SeriesTypography.title,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                    )
+                }
+            }
+        }
+
+        // Double-Tap Seek Ripples (-10s / +10s)
+        if (showDoubleTapSeekLeft) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f)),
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.45f)
+                    .align(Alignment.CenterStart)
+                    .background(Color.White.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = QCrunchyOrange, modifier = Modifier.size(48.dp))
-                    if (!fallbackNotice.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.7f)
+                    Icon(Icons.Default.Replay10, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("-10s", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        }
+        if (showDoubleTapSeekRight) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.45f)
+                    .align(Alignment.CenterEnd)
+                    .background(Color.White.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Forward10, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("+10s", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+            }
+        }
+
+        // Center Controls: Prev Ep, -10s, Large Golden Play/Pause, +10s, Next Ep
+        if (showControls && !isControlsLocked && errorMessage == null) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        color = QYellowPrimary,
+                        strokeWidth = 3.5.dp,
+                        modifier = Modifier.size(52.dp)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        // Previous Episode
+                        if (hasPrevEp && onPlayPrevClick != null) {
+                            IconButton(
+                                onClick = onPlayPrevClick,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous episode", tint = Color.White)
+                            }
+                        }
+
+                        // Rewind 10s
+                        IconButton(
+                            onClick = {
+                                val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
+                                exoPlayer.seekTo(newPos)
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.5f))
                         ) {
-                            Text(
-                                text = fallbackNotice,
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
+                            Icon(Icons.Default.Replay10, contentDescription = "Rewind 10s", tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+
+                        // Center Golden Play / Pause Button with Spring Bounce
+                        Surface(
+                            onClick = {
+                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                            },
+                            shape = CircleShape,
+                            color = QYellowPrimary,
+                            shadowElevation = 8.dp,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .pressScale(onClick = {
+                                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                })
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (isPlaying) "Pause" else "Play",
+                                    tint = QOnYellow,
+                                    modifier = Modifier.size(38.dp)
+                                )
+                            }
+                        }
+
+                        // Forward 10s
+                        IconButton(
+                            onClick = {
+                                val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
+                                exoPlayer.seekTo(newPos)
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.5f))
+                        ) {
+                            Icon(Icons.Default.Forward10, contentDescription = "Forward 10s", tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+
+                        // Next Episode
+                        if (hasNextEp) {
+                            IconButton(
+                                onClick = onPlayNextClick,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Default.SkipNext, contentDescription = "Next episode", tint = Color.White)
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Playback Error Overlay
-        if (errorMessage != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(QDarkObsidian.copy(alpha = 0.92f))
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = "Error",
-                        tint = Color.Red,
-                        modifier = Modifier.size(40.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = errorMessage ?: "Playback error",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            exoPlayer.prepare()
-                            exoPlayer.play()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = QCrunchyOrange, contentColor = Color.Black)
-                    ) {
-                        Text("Retry Playback", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // Crunchyroll Overlay Controls & Top/Bottom Bars
+        // TOP CONTROLS BAR: Back, "Series - E3", Server Badge, Settings, Lock
         AnimatedVisibility(
             visible = showControls,
-            enter = fadeIn(),
-            exit = fadeOut()
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(180)),
+            modifier = Modifier.align(Alignment.TopCenter)
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color.Black.copy(alpha = 0.7f),
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.85f)
-                            )
-                        )
-                    )
+                    .fillMaxWidth()
+                    .background(SeriesTokens.ScrimTop)
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                // Top Bar: Back Button, Title, Mute Toggle
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.TopStart)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (onBackClick != null) {
-                            IconButton(
-                                onClick = onBackClick,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.4f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (isFullscreen) isFullscreen = false
+                                else onBackClick?.invoke()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
 
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // EP Pill
                         Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = QCrunchyOrange,
-                            modifier = Modifier.padding(end = 6.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            color = QYellowPrimary
                         ) {
                             Text(
-                                text = "CRUNCHYROLL STREAM",
-                                fontSize = 9.sp,
+                                text = "EP ${episodeNumber ?: 1}",
+                                color = QOnYellow,
+                                style = SeriesTypography.micro,
                                 fontWeight = FontWeight.Black,
-                                color = Color.Black,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Series & Episode Title
+                        Column(modifier = Modifier.weight(1f)) {
+                            if (!seriesTitle.isNullOrBlank()) {
+                                Text(
+                                    text = seriesTitle,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    style = SeriesTypography.micro,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Text(
+                                text = episodeTitle ?: "Now Playing",
+                                color = Color.White,
+                                style = SeriesTypography.label,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Right Group: Server chip & Aspect Ratio & Lock (fullscreen)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!serverBadge.isNullOrBlank()) {
+                            Surface(
+                                shape = SeriesTokens.shapePill,
+                                color = Color.Black.copy(alpha = 0.5f),
+                                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.3f)),
+                                modifier = Modifier.clickable { showAspectMenu = !showAspectMenu }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = serverBadge,
+                                        color = Color.White,
+                                        style = SeriesTypography.micro,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = if (isFillMode) Icons.Default.AspectRatio else Icons.Default.FitScreen,
+                                        contentDescription = "Aspect Ratio",
+                                        tint = QYellowPrimary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showAspectMenu,
+                                onDismissRequest = { showAspectMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Fit (Original 16:9)") },
+                                    onClick = {
+                                        isFillMode = false
+                                        showAspectMenu = false
+                                    },
+                                    leadingIcon = {
+                                        if (!isFillMode) Icon(Icons.Default.Check, contentDescription = null, tint = QYellowPrimary)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Fill (Crop to Screen)") },
+                                    onClick = {
+                                        isFillMode = true
+                                        showAspectMenu = false
+                                    },
+                                    leadingIcon = {
+                                        if (isFillMode) Icon(Icons.Default.Check, contentDescription = null, tint = QYellowPrimary)
+                                    }
+                                )
+                            }
+                        }
+
+                        if (isFullscreen) {
+                            IconButton(
+                                onClick = { isControlsLocked = !isControlsLocked },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isControlsLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    contentDescription = "Lock controls",
+                                    tint = if (isControlsLocked) QYellowPrimary else Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // BOTTOM CONTROLS BAR: Skip Intro, Seek Slider with Draggable Thumb & Scrubber Preview, Controls
+        AnimatedVisibility(
+            visible = showControls && !isControlsLocked,
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(180)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SeriesTokens.ScrimBottom)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                // Skip Intro Pill (Slides in between introStartSec and introEndSec)
+                if (showSkipIntro && introEndSec > 0 && currentPosSec in introStartSec until introEndSec) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Surface(
+                            onClick = {
+                                exoPlayer.seekTo(introEndSec * 1000L)
+                                onSkipIntroClick()
+                            },
+                            shape = SeriesTokens.shapePill,
+                            color = QYellowPrimary,
+                            shadowElevation = 4.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.FastForward, contentDescription = null, tint = QOnYellow, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "SKIP INTRO",
+                                    style = SeriesTypography.micro,
+                                    fontWeight = FontWeight.Black,
+                                    color = QOnYellow
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Scrubbing Time Preview Bubble
+                if (isScrubbing) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Surface(
+                            shape = SeriesTokens.shapePill,
+                            color = Color.Black.copy(alpha = 0.8f),
+                            border = BorderStroke(1.dp, QYellowPrimary)
+                        ) {
+                            Text(
+                                text = formatTime(scrubPosSec),
+                                color = QYellowPrimary,
+                                style = SeriesTypography.label,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                // Golden Scrubber Seekbar
+                Slider(
+                    value = (if (isScrubbing) scrubPosSec else currentPosSec).toFloat()
+                        .coerceIn(0f, totalDurationSec.toFloat().coerceAtLeast(1f)),
+                    onValueChange = { newPos ->
+                        isScrubbing = true
+                        scrubPosSec = newPos.toInt()
+                    },
+                    onValueChangeFinished = {
+                        exoPlayer.seekTo(scrubPosSec * 1000L)
+                        currentPosSec = scrubPosSec
+                        isScrubbing = false
+                    },
+                    valueRange = 0f..totalDurationSec.toFloat().coerceAtLeast(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = QYellowPrimary,
+                        activeTrackColor = QYellowPrimary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.25f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(18.dp)
+                )
+
+                // Time + Controls Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                            },
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White
+                            )
+                        }
+
                         IconButton(
                             onClick = {
                                 isMuted = !isMuted
                                 exoPlayer.volume = if (isMuted) 0f else 1f
                             },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.4f))
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Icon(
                                 imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "Mute",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // Timestamps
+                        Text(
+                            text = "${formatTime(currentPosSec)} / ${formatTime(totalDurationSec)}",
+                            color = Color.White,
+                            style = SeriesTypography.label,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Playback Speed Chip
+                        Box {
+                            Surface(
+                                shape = SeriesTokens.shapePill,
+                                color = Color.White.copy(alpha = 0.15f),
+                                modifier = Modifier.clickable { showSpeedMenu = !showSpeedMenu }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Speed, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "${if (playbackSpeed == 1.0f) "1" else playbackSpeed}x",
+                                        color = Color.White,
+                                        style = SeriesTypography.micro,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showSpeedMenu,
+                                onDismissRequest = { showSpeedMenu = false }
+                            ) {
+                                listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                                    DropdownMenuItem(
+                                        text = { Text("${speed}x") },
+                                        onClick = {
+                                            playbackSpeed = speed
+                                            exoPlayer.playbackParameters = PlaybackParameters(speed)
+                                            showSpeedMenu = false
+                                        },
+                                        leadingIcon = {
+                                            if (playbackSpeed == speed) {
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = QYellowPrimary)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Fullscreen Toggle
+                        IconButton(
+                            onClick = { isFullscreen = !isFullscreen },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = "Toggle Fullscreen",
                                 tint = Color.White
                             )
                         }
                     }
                 }
+            }
+        }
 
-                // Center Play/Pause & Fast Rewind / Seek Controls
-                Row(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp),
-                    verticalAlignment = Alignment.CenterVertically
+        // Error State Overlay Card
+        if (errorMessage != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.9f))
+                    .padding(20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = SeriesTokens.shapeCard,
+                    color = QSurface,
+                    border = BorderStroke(1.dp, QCardBorder)
                 ) {
-                    // Rewind 10s
-                    IconButton(
-                        onClick = {
-                            val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                            exoPlayer.seekTo(newPos)
-                        },
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Replay10,
-                            contentDescription = "Rewind 10s",
-                            tint = Color.White,
-                            modifier = Modifier.size(26.dp)
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = QLikeRed, modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Playback Interrupted",
+                            style = SeriesTypography.title,
+                            color = QOnSurface
                         )
-                    }
-
-                    // Main Play / Pause Button
-                    IconButton(
-                        onClick = {
-                            if (isPlaying) {
-                                exoPlayer.pause()
-                            } else {
-                                exoPlayer.play()
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = errorMessage ?: "Failed to stream source",
+                            style = SeriesTypography.micro,
+                            color = QOnSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (onRetrySource != null) {
+                                OutlinedButton(
+                                    onClick = onRetrySource,
+                                    shape = SeriesTokens.shapePill
+                                ) {
+                                    Text("Retry Source", color = QOnSurface)
+                                }
                             }
-                            isPlaying = !isPlaying
-                        },
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(QCrunchyOrange)
-                    ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.Black,
-                            modifier = Modifier.size(38.dp)
-                        )
-                    }
-
-                    // Forward 10s
-                    IconButton(
-                        onClick = {
-                            val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
-                            exoPlayer.seekTo(newPos)
-                        },
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Forward10,
-                            contentDescription = "Forward 10s",
-                            tint = Color.White,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
-                }
-
-                // Bottom Controls: Scrubber, Timers, Skip Intro, Fullscreen
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    // Skip Intro Overlay Button if available
-                    if (showSkipIntro && introEndSec > 0) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 6.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
                             Button(
                                 onClick = {
-                                    exoPlayer.seekTo(introEndSec * 1000L)
-                                    onSkipIntroClick()
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolvedUrl))
+                                    context.startActivity(intent)
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = QCrunchyOrange, contentColor = Color.Black),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow
+                                ),
+                                shape = SeriesTokens.shapePill
                             ) {
-                                Icon(imageVector = Icons.Default.FastForward, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("SKIP INTRO", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    // Scrubber Slider
-                    Slider(
-                        value = currentPosSec.toFloat().coerceIn(0f, totalDurationSec.toFloat().coerceAtLeast(1f)),
-                        onValueChange = { newPos ->
-                            currentPosSec = newPos.toInt()
-                        },
-                        onValueChangeFinished = {
-                            exoPlayer.seekTo(currentPosSec * 1000L)
-                        },
-                        valueRange = 0f..totalDurationSec.toFloat().coerceAtLeast(1f),
-                        colors = SliderDefaults.colors(
-                            thumbColor = QCrunchyOrange,
-                            activeTrackColor = QCrunchyOrange,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(18.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${formatTime(currentPosSec)} / ${formatTime(totalDurationSec)}",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Next Episode Quick Button
-                            IconButton(
-                                onClick = onPlayNextClick,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.SkipNext,
-                                    contentDescription = "Next Episode",
-                                    tint = Color.White
-                                )
-                            }
-
-                            // Fullscreen Toggle
-                            IconButton(
-                                onClick = {
-                                    isFullscreen = !isFullscreen
-                                    activity?.requestedOrientation = if (isFullscreen) {
-                                        ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                                    } else {
-                                        ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                                    }
-                                },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = "Fullscreen",
-                                    tint = Color.White
-                                )
+                                Text("Open in Browser", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -593,49 +1025,61 @@ fun EpisodePlayerView(
             }
         }
 
-        // Auto-play Next Episode Overlay Box
+        // Autoplay Next Episode Countdown Overlay
         if (autoplayCountdown != null && autoplayCountdown > 0) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
+                    .background(Color.Black.copy(alpha = 0.88f)),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = QDarkSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, QCrunchyOrange)
+                    shape = SeriesTokens.shapeCard,
+                    color = QSurface,
+                    border = BorderStroke(1.5.dp, QYellowPrimary)
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp),
+                        modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Countdown Ring
+                        RatingRing(
+                            rating = autoplayCountdown.toDouble(),
+                            maxRating = 10.0,
+                            size = 54.dp,
+                            strokeWidth = 4.dp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Next Episode starting in $autoplayCountdown s...",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = Color.White
+                            text = "Up Next in $autoplayCountdown seconds",
+                            style = SeriesTypography.title,
+                            color = QOnSurface
                         )
                         if (!nextEpisodeTitle.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = nextEpisodeTitle,
-                                fontSize = 13.sp,
-                                color = QCrunchyOrange
+                                style = SeriesTypography.label,
+                                color = QYellowDark,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(
                                 onClick = onCancelAutoplayClick,
-                                shape = RoundedCornerShape(8.dp)
+                                shape = SeriesTokens.shapePill
                             ) {
-                                Text("Cancel", color = Color.White)
+                                Text("Cancel", color = QOnSurface)
                             }
                             Button(
                                 onClick = onPlayNextClick,
-                                colors = ButtonDefaults.buttonColors(containerColor = QCrunchyOrange, contentColor = Color.Black),
-                                shape = RoundedCornerShape(8.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = QYellowPrimary,
+                                    contentColor = QOnYellow
+                                ),
+                                shape = SeriesTokens.shapePill
                             ) {
                                 Text("Play Now", fontWeight = FontWeight.Bold)
                             }

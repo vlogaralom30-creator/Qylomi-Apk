@@ -1,10 +1,9 @@
 package com.example.ui.screens.series
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,10 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.*
@@ -27,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -35,14 +31,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.example.data.model.*
 import com.example.ui.components.EpisodePlayerView
-import com.example.ui.components.EpisodeThumbnail
-import com.example.ui.components.NumberedEpisodeGrid
 import com.example.ui.components.SeriesCardItem
+import com.example.ui.components.series.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.PlayerViewModel
+
+enum class PlayerTab(val label: String) {
+    EPISODES("Episodes"),
+    COMMENTS("Comments"),
+    RELATED("Related")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +58,6 @@ fun EpisodePlayerScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // Initial load
     LaunchedEffect(seriesId, episodeId) {
         viewModel.loadEpisodeData(seriesId, episodeId, initialPositionSec)
     }
@@ -96,298 +95,481 @@ fun EpisodePlayerScreen(
 
         val currentEp = uiState.currentEpisode
         val activeSource = uiState.activeSource
+        val currentSeries = uiState.series
+
+        val currentIndex = remember(uiState.episodes, currentEp) {
+            if (currentEp == null) -1
+            else uiState.episodes.indexOfFirst { it.id == currentEp.id }
+        }
+        val hasPrevEp = currentIndex > 0
+        val hasNextEp = currentIndex in 0 until (uiState.episodes.size - 1)
+        val nextEp = if (hasNextEp) uiState.episodes.getOrNull(currentIndex + 1) else null
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // 1. Sticky Video Player
-            if (activeSource != null && currentEp != null) {
-                EpisodePlayerView(
-                    rawVideoUrl = activeSource.url,
-                    initialPositionSec = uiState.initialSeekPositionSec,
-                    showSkipIntro = uiState.showSkipIntro,
-                    introEndSec = uiState.introEndSec,
-                    fallbackNotice = uiState.fallbackNotice,
-                    autoplayCountdown = uiState.autoplayCountdown,
-                    nextEpisodeTitle = uiState.episodes.getOrNull(
-                        uiState.episodes.indexOfFirst { it.id == currentEp.id } + 1
-                    )?.title,
-                    onPositionUpdate = { pos, dur ->
-                        viewModel.updatePlaybackPosition(pos, dur)
-                    },
-                    onVideoReady = { dur ->
-                        viewModel.onVideoReady(dur)
-                    },
-                    onError = { err ->
-                        viewModel.handleSourcePlaybackError(err)
-                    },
-                    onEnded = {
-                        viewModel.onVideoEnded()
-                    },
-                    onSkipIntroClick = {},
-                    onPlayNextClick = {
-                        viewModel.playNextEpisode()
-                    },
-                    onCancelAutoplayClick = {
-                        viewModel.cancelAutoplayCountdown()
-                    },
-                    onBackClick = onBackClick
-                )
-            } else if (uiState.playerError != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Color.Black)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Error",
-                            tint = Color.Red,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = uiState.playerError ?: "No sources available",
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
+            // 1. PINNED VIDEO STAGE (16:9 full width, under status bar)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(SeriesTokens.StageBlack)
+            ) {
+                if (activeSource != null && currentEp != null) {
+                    EpisodePlayerView(
+                        rawVideoUrl = activeSource.url,
+                        initialPositionSec = uiState.initialSeekPositionSec,
+                        showSkipIntro = uiState.showSkipIntro,
+                        introStartSec = currentEp.introStartSec ?: 0,
+                        introEndSec = currentEp.introEndSec ?: 0,
+                        fallbackNotice = uiState.fallbackNotice,
+                        autoplayCountdown = uiState.autoplayCountdown,
+                        nextEpisodeTitle = nextEp?.title,
+                        episodeNumber = currentEp.episodeNumber,
+                        episodeTitle = currentEp.title,
+                        seriesTitle = currentSeries?.title,
+                        backdropUrl = currentEp.thumbnailUrl ?: currentSeries?.effectiveBannerUrl,
+                        serverBadge = "${activeSource.label}${if (!activeSource.quality.isNullOrBlank()) " • ${activeSource.quality}" else ""}",
+                        hasPrevEp = hasPrevEp,
+                        hasNextEp = hasNextEp,
+                        onPositionUpdate = { pos, dur ->
+                            viewModel.updatePlaybackPosition(pos, dur)
+                        },
+                        onVideoReady = { dur ->
+                            viewModel.onVideoReady(dur)
+                        },
+                        onError = { err ->
+                            viewModel.handleSourcePlaybackError(err)
+                        },
+                        onEnded = {
+                            viewModel.onVideoEnded()
+                        },
+                        onPlayPrevClick = if (hasPrevEp) {
+                            { viewModel.selectEpisode(uiState.episodes[currentIndex - 1]) }
+                        } else null,
+                        onPlayNextClick = {
+                            viewModel.playNextEpisode()
+                        },
+                        onCancelAutoplayClick = {
+                            viewModel.cancelAutoplayCountdown()
+                        },
+                        onRetrySource = {
+                            viewModel.selectSourceManually(activeSource)
+                        },
+                        onBackClick = onBackClick
+                    )
+                } else if (uiState.playerError != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Error",
+                                tint = QLikeRed,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = uiState.playerError ?: "No sources available",
+                                color = Color.White,
+                                style = SeriesTypography.body
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            if (uiState.sources.isNotEmpty()) {
+                                Button(
+                                    onClick = { viewModel.selectSourceManually(uiState.sources.first()) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow),
+                                    shape = SeriesTokens.shapePill
+                                ) {
+                                    Text("Try Server 1")
+                                }
+                            }
+                        }
                     }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Color.Black),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = QYellowPrimary)
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = QYellowPrimary)
+                    }
                 }
             }
 
-            // 2. Scrollable Details, Server Chips, Actions, and Tabs
+            // 2. SCROLLABLE PAGE BODY
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .weight(1f),
+                contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                // Episode & Series Header Info
+                // Series Name (Tappable >) & Episode Title Header
                 item {
-                    EpisodeHeaderSection(
-                        series = uiState.series,
-                        episode = currentEp,
-                        isLiked = uiState.isEpisodeLiked,
-                        likesCount = uiState.episodeLikesCount,
-                        isInWatchlist = uiState.isInWatchlist,
-                        onToggleLike = {
-                            if (viewModel.isUserLoggedIn) {
-                                viewModel.toggleEpisodeLike()
-                            } else {
-                                onOpenAuthDialog?.invoke()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        // Tappable Series Name
+                        if (currentSeries != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(SeriesTokens.shapePill)
+                                    .clickable { onNavigateToSeries(currentSeries.slug) }
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = currentSeries.title,
+                                    style = SeriesTypography.label,
+                                    fontWeight = FontWeight.Bold,
+                                    color = QYellowDark
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = QYellowDark,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
-                        },
-                        onToggleWatchlist = {
-                            if (viewModel.isUserLoggedIn) {
-                                viewModel.toggleWatchlist()
-                            } else {
-                                onOpenAuthDialog?.invoke()
+                            Spacer(modifier = Modifier.height(2.dp))
+                        }
+
+                        // S1 - E3 - Episode Title
+                        Text(
+                            text = if (currentEp != null) {
+                                "S${currentEp.seasonNumber} - E${currentEp.episodeNumber} - ${currentEp.title ?: "Episode ${currentEp.episodeNumber}"}"
+                            } else "Playing Episode",
+                            style = SeriesTypography.headline.copy(fontSize = 18.sp),
+                            color = QOnSurface
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Meta Row: Air date, views, language, quality chips
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (!currentEp?.airDate.isNullOrBlank()) {
+                                MetaChip(text = currentEp.airDate)
                             }
-                        },
-                        onShare = {
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "Watch ${uiState.series?.title} - ${currentEp?.title} on Qylomi!")
+                            MetaChip(text = "${currentEp?.viewsCount ?: 0} views")
+                            if (!activeSource?.language.isNullOrBlank()) {
+                                MetaChip(text = activeSource.language, isHighlighted = true)
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share Episode"))
-                        },
-                        onOpenReportSheet = {
-                            if (viewModel.isUserLoggedIn) {
-                                viewModel.openReportSheet()
-                            } else {
-                                onOpenAuthDialog?.invoke()
+                            if (!activeSource?.quality.isNullOrBlank()) {
+                                MetaChip(text = activeSource.quality)
                             }
                         }
-                    )
-                }
 
-                // Servers / Sources Selection Bar
-                if (uiState.sources.isNotEmpty()) {
-                    item {
-                        ServerChipsSection(
-                            sources = uiState.sources,
-                            activeSource = activeSource,
-                            onSelectSource = { viewModel.selectSourceManually(it) }
-                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Action Row (Equal Width): Like | My List | Share | Report
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Like
+                            HeartBurstButton(
+                                isLiked = uiState.isEpisodeLiked,
+                                likesCount = uiState.episodeLikesCount,
+                                onClick = {
+                                    if (viewModel.isUserLoggedIn) viewModel.toggleEpisodeLike()
+                                    else onOpenAuthDialog?.invoke()
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // My List
+                            AnimatedBookmark(
+                                isInList = uiState.isInWatchlist,
+                                onClick = {
+                                    if (viewModel.isUserLoggedIn) viewModel.toggleWatchlist()
+                                    else onOpenAuthDialog?.invoke()
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // Share
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(SeriesTokens.shapeChip)
+                                    .clickable {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(
+                                                Intent.EXTRA_TEXT,
+                                                "Watch ${currentSeries?.title} - ${currentEp?.title} on Qylomi!"
+                                            )
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Share Episode"))
+                                    }
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Outlined.Share, contentDescription = "Share", tint = QOnSurfaceVariant, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text("Share", style = SeriesTypography.micro, color = QOnSurfaceVariant)
+                            }
+
+                            // Report
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(SeriesTokens.shapeChip)
+                                    .clickable {
+                                        if (viewModel.isUserLoggedIn) viewModel.openReportSheet()
+                                        else onOpenAuthDialog?.invoke()
+                                    }
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Outlined.Flag, contentDescription = "Report", tint = QOnSurfaceVariant, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text("Report", style = SeriesTypography.micro, color = QOnSurfaceVariant)
+                            }
+                        }
                     }
                 }
 
-                // Tabs Header ([Episodes] | [Comments] | [More Like This])
+                // Servers Section: Horizontally Scrolling Chips
+                if (uiState.sources.isNotEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "STREAM SERVERS",
+                                style = SeriesTypography.micro.copy(fontSize = 11.sp),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = QOnSurfaceVariant,
+                                letterSpacing = 0.5.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(uiState.sources, key = { it.id }) { src ->
+                                    val isSelected = src.id == activeSource?.id
+                                    val isFailing = src.failCount >= 3
+
+                                    Surface(
+                                        onClick = { viewModel.selectSourceManually(src) },
+                                        shape = SeriesTokens.shapePill,
+                                        color = if (isSelected) QYellowPrimary else QSurfaceVariant,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) QYellowPrimary else if (isFailing) QLikeRed else QCardBorder
+                                        ),
+                                        modifier = Modifier.pressScale(onClick = { viewModel.selectSourceManually(src) })
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${src.label}${if (!src.quality.isNullOrBlank()) " • ${src.quality}" else ""}${if (!src.language.isNullOrBlank()) " (${src.language})" else ""}",
+                                                style = SeriesTypography.label,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) QOnYellow else QOnSurface
+                                            )
+                                            if (isFailing) {
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(Icons.Default.Warning, contentDescription = "Unstable", tint = QLikeRed, modifier = Modifier.size(13.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Up Next Card (when next episode is available)
+                if (nextEp != null) {
+                    item {
+                        Card(
+                            shape = SeriesTokens.shapeCard,
+                            colors = CardDefaults.cardColors(containerColor = QSurface),
+                            border = BorderStroke(1.dp, QCardBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .clickable { viewModel.selectEpisode(nextEp) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                PosterImage(
+                                    posterUrl = nextEp.thumbnailUrl,
+                                    bannerUrl = currentSeries?.effectiveBannerUrl,
+                                    title = nextEp.title,
+                                    modifier = Modifier
+                                        .width(96.dp)
+                                        .aspectRatio(16f / 9f)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "UP NEXT",
+                                        style = SeriesTypography.micro.copy(fontSize = 10.sp),
+                                        fontWeight = FontWeight.Black,
+                                        color = QYellowDark
+                                    )
+                                    Text(
+                                        text = "E${nextEp.episodeNumber} - ${nextEp.title ?: "Episode ${nextEp.episodeNumber}"}",
+                                        style = SeriesTypography.title.copy(fontSize = 13.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = QOnSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.selectEpisode(nextEp) },
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(QYellowPrimary)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = "Play next", tint = QOnYellow)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Sticky Tabs: Episodes | Comments | Related
                 item {
                     TabRow(
-                        selectedTabIndex = uiState.selectedTab,
+                        selectedTabIndex = uiState.selectedTab.coerceIn(0, 2),
                         containerColor = QSurface,
                         contentColor = QOnSurface,
                         indicator = { tabPositions ->
-                            if (uiState.selectedTab < tabPositions.size) {
+                            val currentPos = uiState.selectedTab.coerceIn(0, 2)
+                            if (currentPos < tabPositions.size) {
                                 TabRowDefaults.SecondaryIndicator(
-                                    modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.selectedTab]),
+                                    modifier = Modifier.tabIndicatorOffset(tabPositions[currentPos]),
                                     color = QYellowPrimary
                                 )
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
                     ) {
-                        Tab(
-                            selected = uiState.selectedTab == 0,
-                            onClick = { viewModel.setSelectedTab(0) },
-                            text = { Text("Episodes", fontWeight = FontWeight.SemiBold, color = if (uiState.selectedTab == 0) QYellowPrimary else QOnSurfaceVariant) },
-                            modifier = Modifier.testTag("player_tab_episodes")
-                        )
-                        Tab(
-                            selected = uiState.selectedTab == 1,
-                            onClick = { viewModel.setSelectedTab(1) },
-                            text = {
-                                Text(
-                                    "Comments (${uiState.comments.size})",
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (uiState.selectedTab == 1) QYellowPrimary else QOnSurfaceVariant
-                                )
-                            },
-                            modifier = Modifier.testTag("player_tab_comments")
-                        )
-                        Tab(
-                            selected = uiState.selectedTab == 2,
-                            onClick = { viewModel.setSelectedTab(2) },
-                            text = { Text("More Like This", fontWeight = FontWeight.SemiBold, color = if (uiState.selectedTab == 2) QYellowPrimary else QOnSurfaceVariant) },
-                            modifier = Modifier.testTag("player_tab_related")
-                        )
+                        PlayerTab.values().forEachIndexed { index, tab ->
+                            val isSelected = uiState.selectedTab == index
+                            Tab(
+                                selected = isSelected,
+                                onClick = { viewModel.setSelectedTab(index) },
+                                text = {
+                                    Text(
+                                        text = when (tab) {
+                                            PlayerTab.COMMENTS -> "Comments (${uiState.comments.size})"
+                                            else -> tab.label
+                                        },
+                                        style = SeriesTypography.label,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) QYellowDark else QOnSurfaceVariant
+                                    )
+                                },
+                                modifier = Modifier.testTag("player_tab_${tab.name.lowercase()}")
+                            )
+                        }
                     }
                 }
 
                 // Tab Content
                 when (uiState.selectedTab) {
                     0 -> { // EPISODES TAB
-                        if (uiState.seasons.size > 1) {
-                            item {
-                                SeasonSelectorRow(
-                                    seasons = uiState.seasons,
-                                    selectedSeasonNumber = uiState.selectedSeasonNumber,
-                                    onSelectSeason = { viewModel.setSelectedSeasonNumber(it) }
-                                )
-                            }
-                        }
-
-                        val filteredEps = if (uiState.selectedSeasonNumber != null) {
-                            uiState.episodes.filter { it.seasonNumber == uiState.selectedSeasonNumber }
-                        } else uiState.episodes
-
                         item {
-                            NumberedEpisodeGrid(
-                                episodes = filteredEps,
+                            EpisodeSelector(
+                                episodes = uiState.episodes,
+                                seasons = uiState.seasons,
+                                series = currentSeries,
                                 currentEpisodeId = currentEp?.id,
                                 onEpisodeClick = { ep -> viewModel.selectEpisode(ep) },
-                                modifier = Modifier.padding(bottom = 16.dp)
+                                initialViewModeIsGrid = true,
+                                modifier = Modifier.padding(top = 8.dp)
                             )
                         }
                     }
 
-
                     1 -> { // COMMENTS TAB
                         item {
-                            CommentInputBox(
+                            SeriesCommentsSection(
+                                comments = uiState.comments,
+                                isLoading = uiState.isCommentsLoading,
+                                currentUserId = viewModel.currentUserId,
                                 commentInput = uiState.commentInput,
                                 replyingTo = uiState.replyingToComment,
-                                editing = uiState.editingComment,
+                                editingComment = uiState.editingComment,
+                                seriesCreatorId = currentSeries?.createdBy,
                                 onInputChange = { viewModel.setCommentInput(it) },
-                                onPostClick = { viewModel.postComment() },
+                                onPostComment = {
+                                    if (viewModel.isUserLoggedIn) viewModel.postComment()
+                                    else onOpenAuthDialog?.invoke()
+                                },
+                                onReply = { viewModel.setReplyingTo(it) },
+                                onEdit = { viewModel.setEditingComment(it) },
+                                onDelete = { viewModel.deleteComment(it.id) },
+                                onToggleLike = {
+                                    if (viewModel.isUserLoggedIn) viewModel.toggleCommentLike(it)
+                                    else onOpenAuthDialog?.invoke()
+                                },
                                 onCancelReplyOrEdit = {
                                     viewModel.setReplyingTo(null)
                                     viewModel.setEditingComment(null)
                                     viewModel.setCommentInput("")
-                                }
+                                },
+                                modifier = Modifier.padding(top = 8.dp)
                             )
-                        }
-
-                        if (uiState.isCommentsLoading) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(color = QYellowPrimary, modifier = Modifier.size(32.dp))
-                                }
-                            }
-                        } else if (uiState.comments.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No comments yet. Be the first to start a discussion!",
-                                        color = QOnSurfaceVariant,
-                                        fontSize = 13.sp
-                                    )
-                                }
-                            }
-                        } else {
-                            val topLevelComments = uiState.comments.filter { it.parentId == null }
-                            items(topLevelComments, key = { it.id }) { comment ->
-                                CommentItemRow(
-                                    comment = comment,
-                                    allComments = uiState.comments,
-                                    currentUserId = viewModel.currentUserId,
-                                    onReply = { viewModel.setReplyingTo(it) },
-                                    onEdit = { viewModel.setEditingComment(it) },
-                                    onDelete = { viewModel.deleteComment(it.id) },
-                                    onToggleLike = { viewModel.toggleCommentLike(it) }
-                                )
-                            }
                         }
                     }
 
                     2 -> { // RELATED SERIES TAB
-                        if (uiState.relatedSeries.isEmpty()) {
-                            item {
-                                Box(
+                        item {
+                            if (uiState.relatedSeries.isEmpty()) {
+                                SeriesEmptyState(
+                                    icon = Icons.Default.Info,
+                                    title = "No related titles found",
+                                    description = "Discover more series on the home page."
+                                )
+                            } else {
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Text("No related titles found", color = QOnSurfaceVariant)
-                                }
-                            }
-                        } else {
-                            item {
-                                Column(modifier = Modifier.padding(16.dp)) {
                                     uiState.relatedSeries.chunked(3).forEach { rowCards ->
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(bottom = 12.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             rowCards.forEach { card ->
-                                                Box(modifier = Modifier.weight(1f)) {
-                                                    SeriesCardItem(
-                                                        card = card,
-                                                        isInWatchlist = false,
-                                                        onCardClick = { onNavigateToSeries(card.slug) },
-                                                        onWatchlistClick = {}
-                                                    )
-                                                }
+                                                SeriesCardItem(
+                                                    card = card,
+                                                    isInWatchlist = false,
+                                                    onCardClick = { onNavigateToSeries(card.slug) },
+                                                    onWatchlistClick = {},
+                                                    modifier = Modifier.weight(1f)
+                                                )
                                             }
-                                            // Fill remaining empty columns
                                             repeat(3 - rowCards.size) {
                                                 Spacer(modifier = Modifier.weight(1f))
                                             }
@@ -413,574 +595,4 @@ fun EpisodePlayerScreen(
             )
         }
     }
-}
-
-@Composable
-fun EpisodeHeaderSection(
-    series: Series?,
-    episode: Episode?,
-    isLiked: Boolean,
-    likesCount: Int,
-    isInWatchlist: Boolean,
-    onToggleLike: () -> Unit,
-    onToggleWatchlist: () -> Unit,
-    onShare: () -> Unit,
-    onOpenReportSheet: () -> Unit
-) {
-    var isExpandedDescription by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        // Series Title & Episode Season info
-        Text(
-            text = series?.title ?: "",
-            color = QOnSurfaceVariant,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = episode?.let { "S${it.seasonNumber}:E${it.episodeNumber} • ${it.title ?: "Episode ${it.episodeNumber}"}" } ?: "",
-            color = QOnSurface,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Air Date & Views Count
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!episode?.airDate.isNullOrBlank()) {
-                Text(
-                    text = "Aired: ${episode?.airDate}",
-                    color = QOnSurfaceVariant,
-                    fontSize = 12.sp
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            }
-            Text(
-                text = "${episode?.viewsCount ?: 0} views",
-                color = QOnSurfaceVariant,
-                fontSize = 12.sp
-            )
-        }
-
-        // Description
-        if (!episode?.description.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = episode.description,
-                color = QOnSurface,
-                fontSize = 13.sp,
-                maxLines = if (isExpandedDescription) Int.MAX_VALUE else 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.clickable { isExpandedDescription = !isExpandedDescription }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Action Buttons Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Like
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .clickable { onToggleLike() }
-                    .testTag("episode_like_button")
-            ) {
-                Icon(
-                    imageVector = if (isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Like",
-                    tint = if (isLiked) QYellowPrimary else QOnSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (likesCount > 0) "$likesCount" else "Like",
-                    color = if (isLiked) QYellowPrimary else QOnSurfaceVariant,
-                    fontSize = 11.sp
-                )
-            }
-
-            // Watchlist
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onToggleWatchlist() }
-            ) {
-                Icon(
-                    imageVector = if (isInWatchlist) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = "My List",
-                    tint = if (isInWatchlist) QYellowPrimary else QOnSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "My List",
-                    color = if (isInWatchlist) QYellowPrimary else QOnSurfaceVariant,
-                    fontSize = 11.sp
-                )
-            }
-
-            // Share
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onShare() }
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Share,
-                    contentDescription = "Share",
-                    tint = QOnSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Share", color = QOnSurfaceVariant, fontSize = 11.sp)
-            }
-
-            // Report
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onOpenReportSheet() }
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Flag,
-                    contentDescription = "Report",
-                    tint = QOnSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Report", color = QOnSurfaceVariant, fontSize = 11.sp)
-            }
-        }
-    }
-}
-
-@Composable
-fun ServerChipsSection(
-    sources: List<EpisodeSource>,
-    activeSource: EpisodeSource?,
-    onSelectSource: (EpisodeSource) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = "Streaming Servers",
-            color = QOnSurface,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
-
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(sources, key = { it.id }) { src ->
-                val isActive = src.id == activeSource?.id
-                val isHighFail = src.failCount >= 3
-
-                Surface(
-                    onClick = { onSelectSource(src) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isActive) QYellowPrimary else QSurface,
-                    border = if (isHighFail && !isActive) BorderStroke(1.dp, Color.Red) else null,
-                    modifier = Modifier.testTag("server_chip_${src.id}")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Dns,
-                            contentDescription = null,
-                            tint = if (isActive) QOnYellow else QOnSurface,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = src.label,
-                            color = if (isActive) QOnYellow else QOnSurface,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (!src.quality.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = src.quality,
-                                color = if (isActive) QOnYellow.copy(alpha = 0.8f) else QOnSurfaceVariant,
-                                fontSize = 11.sp
-                            )
-                        }
-                        if (!src.language.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "(${src.language})",
-                                color = if (isActive) QOnYellow.copy(alpha = 0.8f) else QOnSurfaceVariant,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SeasonSelectorRow(
-    seasons: List<Season>,
-    selectedSeasonNumber: Int?,
-    onSelectSeason: (Int) -> Unit
-) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(seasons, key = { it.id }) { season ->
-            val isSelected = season.seasonNumber == selectedSeasonNumber
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelectSeason(season.seasonNumber) },
-                label = { Text("Season ${season.seasonNumber}") },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = QYellowPrimary,
-                    selectedLabelColor = QOnYellow,
-                    containerColor = QSurface,
-                    labelColor = QOnSurface
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun EpisodeListItem(
-    episode: Episode,
-    series: Series?,
-    isCurrentlyPlaying: Boolean,
-    onSelectEpisode: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelectEpisode() }
-            .background(if (isCurrentlyPlaying) QSurface.copy(alpha = 0.8f) else Color.Transparent)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Thumbnail Container with fallback & badges
-        EpisodeThumbnail(
-            episode = episode,
-            series = series,
-            modifier = Modifier.width(112.dp),
-            showBadges = true,
-            isPlaying = isCurrentlyPlaying
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        // Episode Info
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Episode ${episode.episodeNumber}",
-                color = if (isCurrentlyPlaying) QYellowPrimary else QOnSurfaceVariant,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = episode.title ?: "Episode ${episode.episodeNumber}",
-                color = QOnSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (episode.durationSeconds != null) {
-                Text(
-                    text = "${episode.durationSeconds / 60}m",
-                    color = QOnSurfaceVariant,
-                    fontSize = 11.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun CommentInputBox(
-    commentInput: String,
-    replyingTo: SeriesComment?,
-    editing: SeriesComment?,
-    onInputChange: (String) -> Unit,
-    onPostClick: () -> Unit,
-    onCancelReplyOrEdit: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(QSurface)
-            .padding(12.dp)
-    ) {
-        if (replyingTo != null || editing != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (editing != null) "Editing comment" else "Replying to comment",
-                    color = QYellowPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(
-                    onClick = onCancelReplyOrEdit,
-                    modifier = Modifier.size(20.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Cancel", tint = QOnSurfaceVariant)
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = commentInput,
-                onValueChange = onInputChange,
-                placeholder = { Text("Add a comment...", fontSize = 13.sp) },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = QYellowPrimary,
-                    unfocusedBorderColor = QCardBorder,
-                    focusedTextColor = QOnSurface,
-                    unfocusedTextColor = QOnSurface
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("comment_input_field")
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            IconButton(
-                onClick = onPostClick,
-                enabled = commentInput.trim().isNotEmpty(),
-                modifier = Modifier
-                    .background(
-                        if (commentInput.trim().isNotEmpty()) QYellowPrimary else Color.DarkGray,
-                        CircleShape
-                    )
-                    .testTag("comment_post_button")
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = if (commentInput.trim().isNotEmpty()) QOnYellow else Color.Gray,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun CommentItemRow(
-    comment: SeriesComment,
-    allComments: List<SeriesComment>,
-    currentUserId: String?,
-    onReply: (SeriesComment) -> Unit,
-    onEdit: (SeriesComment) -> Unit,
-    onDelete: (SeriesComment) -> Unit,
-    onToggleLike: (SeriesComment) -> Unit
-) {
-    val childComments = remember(allComments, comment.id) {
-        allComments.filter { it.parentId == comment.id }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // User Avatar Placeholder
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(QYellowPrimary.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = QYellowPrimary)
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val userLabel = if (comment.userId.length >= 8) comment.userId.take(8) else comment.userId
-                    Text(
-                        text = userLabel,
-                        color = QOnSurface,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    if (currentUserId == comment.userId) {
-                        Row {
-                            IconButton(
-                                onClick = { onEdit(comment) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = Color.Gray, modifier = Modifier.size(14.dp))
-                            }
-                            IconButton(
-                                onClick = { onDelete(comment) },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red, modifier = Modifier.size(14.dp))
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(text = comment.content, color = QOnSurface, fontSize = 13.sp)
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Like (${comment.likesCount})",
-                        color = QYellowPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onToggleLike(comment) }
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "Reply",
-                        color = QOnSurfaceVariant,
-                        fontSize = 11.sp,
-                        modifier = Modifier.clickable { onReply(comment) }
-                    )
-                }
-            }
-        }
-
-        // Render Child Replies
-        if (childComments.isNotEmpty()) {
-            Column(modifier = Modifier.padding(start = 42.dp, top = 8.dp)) {
-                childComments.forEach { reply ->
-                    CommentItemRow(
-                        comment = reply,
-                        allComments = allComments,
-                        currentUserId = currentUserId,
-                        onReply = onReply,
-                        onEdit = onEdit,
-                        onDelete = onDelete,
-                        onToggleLike = onToggleLike
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SourceReportBottomSheet(
-    sourceLabel: String,
-    isSubmitting: Boolean,
-    onDismiss: () -> Unit,
-    onSubmitReport: (reason: String, details: String?) -> Unit
-) {
-    var selectedReason by remember { mutableStateOf("Broken Video") }
-    var detailsInput by remember { mutableStateOf("") }
-
-    val reasons = listOf(
-        "Broken Video / Black Screen",
-        "Audio Desync / Muted",
-        "Wrong Episode / Content",
-        "Buffering / Very Slow",
-        "Subtitle or Dubbing Error",
-        "Other Issue"
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Report Issue: $sourceLabel", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Text("Select the reason for reporting this server:", color = QOnSurfaceVariant, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                reasons.forEach { reason ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedReason = reason }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        RadioButton(
-                            selected = selectedReason == reason,
-                            onClick = { selectedReason = reason },
-                            colors = RadioButtonDefaults.colors(selectedColor = QYellowPrimary)
-                        )
-                        Text(text = reason, color = Color.White, fontSize = 13.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = detailsInput,
-                    onValueChange = { detailsInput = it },
-                    placeholder = { Text("Additional details (optional)...", fontSize = 12.sp) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = QYellowPrimary,
-                        unfocusedBorderColor = Color.Gray,
-                        focusedTextColor = Color.White
-                    )
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSubmitReport(selectedReason, detailsInput.ifBlank { null }) },
-                enabled = !isSubmitting,
-                colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow)
-            ) {
-                if (isSubmitting) {
-                    CircularProgressIndicator(color = QOnYellow, modifier = Modifier.size(16.dp))
-                } else {
-                    Text("Submit Report", fontWeight = FontWeight.Bold)
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color.White)
-            }
-        },
-        containerColor = QSurface
-    )
 }

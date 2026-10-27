@@ -3,11 +3,19 @@
 -keep @com.squareup.moshi.JsonClass class *
 -keep class * extends com.squareup.moshi.JsonAdapter
 
-# Retrofit interfaces and generic signatures
+# Retrofit interfaces, Call, Response and generic signatures
 -keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod
 -keep class retrofit2.** { *; }
 -keep interface retrofit2.** { *; }
+-keep class retrofit2.Call { *; }
+-keep class retrofit2.Response { *; }
 -dontwarn retrofit2.**
+
+# Kotlin reflect & coroutines continuation
+-keep class kotlin.reflect.** { *; }
+-keep interface kotlin.reflect.** { *; }
+-keep class kotlin.coroutines.Continuation { *; }
+-dontwarn kotlin.reflect.**
 
 # OkHttp / Okio
 -keep class okhttp3.** { *; }

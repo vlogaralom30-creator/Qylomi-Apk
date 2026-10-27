@@ -86,6 +86,25 @@ class SeriesViewModel(application: Application) : AndroidViewModel(application) 
     private val _detailsError = MutableStateFlow<String?>(null)
     val detailsError: StateFlow<String?> = _detailsError.asStateFlow()
 
+    // Series comments state
+    private val _seriesComments = MutableStateFlow<List<SeriesComment>>(emptyList())
+    val seriesComments: StateFlow<List<SeriesComment>> = _seriesComments.asStateFlow()
+
+    private val _isCommentsLoading = MutableStateFlow(false)
+    val isCommentsLoading: StateFlow<Boolean> = _isCommentsLoading.asStateFlow()
+
+    private val _commentInput = MutableStateFlow("")
+    val commentInput: StateFlow<String> = _commentInput.asStateFlow()
+
+    private val _replyingToComment = MutableStateFlow<SeriesComment?>(null)
+    val replyingToComment: StateFlow<SeriesComment?> = _replyingToComment.asStateFlow()
+
+    private val _editingComment = MutableStateFlow<SeriesComment?>(null)
+    val editingComment: StateFlow<SeriesComment?> = _editingComment.asStateFlow()
+
+    val currentUserId: String?
+        get() = repository.currentUserId
+
     init {
         loadHomeData()
     }
@@ -226,6 +245,9 @@ class SeriesViewModel(application: Application) : AndroidViewModel(application) 
                 if (repository.isUserLoggedIn()) {
                     checkUserStatusForSeries(series.id)
                 }
+
+                // Load series comments
+                loadSeriesComments(series.id)
             } else {
                 val err = (res as? SeriesResult.Error)?.message ?: "Unable to load series details"
                 _detailsError.value = err
@@ -371,5 +393,143 @@ class SeriesViewModel(application: Application) : AndroidViewModel(application) 
 
     fun grantMatureConsent() {
         prefs.edit().putBoolean("has_mature_consent", true).apply()
+    }
+
+    // -------------------------------------------------------------------------
+    // Series Comments Actions
+    // -------------------------------------------------------------------------
+    fun loadSeriesComments(seriesId: String) {
+        viewModelScope.launch {
+            _isCommentsLoading.value = true
+            val res = repository.getComments(seriesId = seriesId, episodeId = null)
+            if (res.isSuccess) {
+                val list = res.getOrNull() ?: emptyList()
+                val listWithLikes = list.map { c ->
+                    val isLiked = if (repository.isUserLoggedIn()) repository.isCommentLiked(c.id).getOrNull() == true else false
+                    c.copy(isLiked = isLiked)
+                }
+                _seriesComments.value = listWithLikes
+            }
+            _isCommentsLoading.value = false
+        }
+    }
+
+    fun setCommentInput(input: String) {
+        _commentInput.value = input
+    }
+
+    fun setReplyingTo(comment: SeriesComment?) {
+        _replyingToComment.value = comment
+        _editingComment.value = null
+    }
+
+    fun setEditingComment(comment: SeriesComment?) {
+        _editingComment.value = comment
+        _replyingToComment.value = null
+        if (comment != null) {
+            _commentInput.value = comment.content
+        }
+    }
+
+    fun cancelReplyOrEdit() {
+        _replyingToComment.value = null
+        _editingComment.value = null
+        _commentInput.value = ""
+    }
+
+    fun postSeriesComment(onAuthRequired: () -> Unit) {
+        if (!repository.isUserLoggedIn()) {
+            onAuthRequired()
+            return
+        }
+        val series = _currentSeries.value ?: return
+        val text = _commentInput.value.trim()
+        if (text.isEmpty()) return
+
+        val editing = _editingComment.value
+        val replying = _replyingToComment.value
+
+        viewModelScope.launch {
+            if (editing != null) {
+                val res = repository.editCommentContent(editing.id, text)
+                if (res.isSuccess) {
+                    _seriesComments.value = _seriesComments.value.map {
+                        if (it.id == editing.id) it.copy(content = text) else it
+                    }
+                    cancelReplyOrEdit()
+                }
+            } else {
+                val res = repository.addComment(
+                    seriesId = series.id,
+                    episodeId = null,
+                    parentId = replying?.id,
+                    content = text
+                )
+                if (res.isSuccess) {
+                    val newComment = res.getOrNull()
+                    if (newComment != null) {
+                        _seriesComments.value = listOf(newComment) + _seriesComments.value
+                    } else {
+                        loadSeriesComments(series.id)
+                    }
+                    cancelReplyOrEdit()
+                }
+            }
+        }
+    }
+
+    fun deleteSeriesComment(commentId: String) {
+        viewModelScope.launch {
+            val res = repository.deleteComment(commentId)
+            if (res.isSuccess) {
+                _seriesComments.value = _seriesComments.value.filter { it.id != commentId && it.parentId != commentId }
+            }
+        }
+    }
+
+    fun toggleCommentLike(comment: SeriesComment, onAuthRequired: () -> Unit) {
+        if (!repository.isUserLoggedIn()) {
+            onAuthRequired()
+            return
+        }
+        val wasLiked = comment.isLiked
+        val newLiked = !wasLiked
+        val newCount = if (newLiked) comment.likesCount + 1 else (comment.likesCount - 1).coerceAtLeast(0)
+
+        // Optimistic UI
+        _seriesComments.value = _seriesComments.value.map {
+            if (it.id == comment.id) it.copy(isLiked = newLiked, likesCount = newCount) else it
+        }
+
+        viewModelScope.launch {
+            if (wasLiked) {
+                repository.unlikeComment(comment.id)
+            } else {
+                repository.likeComment(comment.id)
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Safe Episode Navigation (Bounds-Checked)
+    // -------------------------------------------------------------------------
+    fun getNextEpisode(currentEpisodeId: String): Episode? {
+        val episodes = _seriesEpisodes.value
+        if (episodes.isEmpty()) return null
+        val currentIndex = episodes.indexOfFirst { it.id == currentEpisodeId }
+        if (currentIndex in 0 until (episodes.size - 1)) {
+            return episodes[currentIndex + 1]
+        }
+        return null
+    }
+
+    fun getPreviousEpisode(currentEpisodeId: String): Episode? {
+        val episodes = _seriesEpisodes.value
+        if (episodes.isEmpty()) return null
+        val currentIndex = episodes.indexOfFirst { it.id == currentEpisodeId }
+        if (currentIndex > 0 && currentIndex < episodes.size) {
+            return episodes[currentIndex - 1]
+        }
+        return null
     }
 }

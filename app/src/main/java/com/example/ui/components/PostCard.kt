@@ -92,6 +92,7 @@ fun PostCard(
     onOpenReels: ((Post) -> Unit)? = null,
     onOpenMenu: ((Post) -> Unit)? = null,
     onLikersClick: ((Post) -> Unit)? = null,
+    onRelayClick: ((Post) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -641,7 +642,7 @@ fun PostCard(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable {
-                            // TODO: Open Relay BottomSheet
+                            onRelayClick?.invoke(post)
                         }
                         .padding(horizontal = 6.dp, vertical = 6.dp)
                 ) {

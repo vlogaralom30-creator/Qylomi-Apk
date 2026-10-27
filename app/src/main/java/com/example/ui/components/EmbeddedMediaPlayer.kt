@@ -86,29 +86,23 @@ fun EmbeddedMediaPlayer(
     ) {
         when (media.type) {
             MediaType.YOUTUBE -> {
-                if (isPlayingInline && media.embedUrl != null) {
+                if (isPlayingInline) {
+                    val videoId = media.id
+                    val embedUrl = if (!videoId.isNullOrBlank()) {
+                        "https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&playsinline=1&enablejsapi=1&rel=0"
+                    } else {
+                        media.embedUrl ?: media.url
+                    }
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(16f / 9f)
+                            .background(Color.Black)
                     ) {
-                        val ytHandler = com.example.video.VideoPlatformRegistry.resolve(media.url)
-                        val parsed = ytHandler.parse(media.url)
-                        val extracted = com.example.video.ExtractedVideo(
-                            platform = "youtube",
-                            videoId = parsed?.videoId,
-                            originalUrl = media.url,
-                            embedUrl = media.embedUrl ?: "",
-                            thumbnailUrl = media.thumbnailUrl,
-                            title = media.title,
-                            isVertical = parsed?.isShort == true,
-                            isShort = parsed?.isShort == true
-                        )
-                        ytHandler.Player(
-                            video = extracted,
-                            modifier = Modifier.fillMaxSize(),
-                            config = com.example.video.PlayerConfig(autoPlay = true, showControls = true),
-                            controller = null
+                        InAppVideoWebView(
+                            url = embedUrl,
+                            modifier = Modifier.fillMaxSize()
                         )
                         Row(
                             modifier = Modifier
@@ -614,14 +608,14 @@ fun InAppVideoWebView(url: String, modifier: Modifier = Modifier) {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    // Disable hardware layer to avoid missing rendernode errors on cloud emulators
-                    setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+                    setLayerType(View.LAYER_TYPE_NONE, null)
 
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
                         mediaPlaybackRequiresUserGesture = false
                         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        userAgentString = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                     }
                     webChromeClient = WebChromeClient()
                     webViewClient = object : WebViewClient() {
@@ -640,6 +634,14 @@ fun InAppVideoWebView(url: String, modifier: Modifier = Modifier) {
                 if (!hasError && webView.url != url) {
                     webView.loadUrl(url)
                 }
+            },
+            onRelease = { webView ->
+                try {
+                    webView.stopLoading()
+                    webView.loadUrl("about:blank")
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                    webView.destroy()
+                } catch (_: Exception) {}
             },
             modifier = modifier
         )
@@ -680,6 +682,7 @@ fun InAppHtmlWebView(htmlData: String, modifier: Modifier = Modifier) {
                         override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                             hasError = true
                             try {
+                                (view?.parent as? ViewGroup)?.removeView(view)
                                 view?.destroy()
                             } catch (_: Exception) {}
                             return true
@@ -687,6 +690,14 @@ fun InAppHtmlWebView(htmlData: String, modifier: Modifier = Modifier) {
                     }
                     loadDataWithBaseURL(null, htmlData, "text/html", "UTF-8", null)
                 }
+            },
+            onRelease = { webView ->
+                try {
+                    webView.stopLoading()
+                    webView.loadUrl("about:blank")
+                    (webView.parent as? ViewGroup)?.removeView(webView)
+                    webView.destroy()
+                } catch (_: Exception) {}
             },
             modifier = modifier
         )
