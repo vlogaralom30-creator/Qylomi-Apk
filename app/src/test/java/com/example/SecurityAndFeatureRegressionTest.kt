@@ -30,7 +30,6 @@ class SecurityAndFeatureRegressionTest {
             username = "qylomi_user",
             displayName = "Qylomi Creator",
             avatarUrl = "https://example.com/avatar.png",
-            userId = "user-1234",
             refreshToken = "refresh_token_abc",
             accessToken = "access_token_xyz"
         )
@@ -45,7 +44,7 @@ class SecurityAndFeatureRegressionTest {
         val deserialized = adapter.fromJson(json)
         assertNotNull(deserialized)
         assertEquals(account.email, deserialized?.email)
-        assertEquals(account.userId, deserialized?.userId)
+        assertEquals(account.username, deserialized?.username)
         assertEquals(account.refreshToken, deserialized?.refreshToken)
     }
 
@@ -71,7 +70,7 @@ class SecurityAndFeatureRegressionTest {
     fun pixelArtData_serializationRoundTrip() {
         val pixelArt = PixelArtData(
             gridSize = 16,
-            palette = listOf("#000000", "#FFFFFF", "#FFDD00"),
+            colors = mapOf("0" to "#000000", "1" to "#FFFFFF", "2" to "#FFDD00"),
             pixels = listOf(0, 1, 2, 0, 1, 2)
         )
 
@@ -82,7 +81,7 @@ class SecurityAndFeatureRegressionTest {
         val restored = adapter.fromJson(json)
         assertNotNull(restored)
         assertEquals(16, restored?.gridSize)
-        assertEquals(3, restored?.palette?.size)
+        assertEquals(3, restored?.colors?.size)
         assertEquals(6, restored?.pixels?.size)
     }
 

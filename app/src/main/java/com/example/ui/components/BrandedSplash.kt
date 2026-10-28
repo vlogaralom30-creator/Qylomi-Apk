@@ -168,11 +168,12 @@ fun BrandedSplash(
             }
     ) {
         // Radial Glow
+        val glowColor = QYellowLight
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(QYellowLight.copy(alpha = 0.4f), Color.Transparent),
+                    colors = listOf(glowColor.copy(alpha = 0.4f), Color.Transparent),
                     center = center,
                     radius = size.width * 0.4f
                 ),

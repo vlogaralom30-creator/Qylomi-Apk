@@ -4,6 +4,8 @@ import com.example.data.model.Post
 
 enum class MediaType {
     YOUTUBE,
+    STREAMTAPE,
+    DOODSTREAM,
     TIKTOK,
     GOOGLE_DRIVE,
     DIRECT_VIDEO,
@@ -25,6 +27,11 @@ object MediaParser {
 
     private val YOUTUBE_REGEX = Regex(
         "(?:youtu\\.be/|youtube\\.com/(?:watch\\?(?:.*&)?v=|(?:embed|v|shorts)/))([a-zA-Z0-9_-]{11})"
+    )
+
+    private val STREAMTAPE_REGEX = Regex(
+        "https?://(?:www\\.)?streamtape\\.(?:com|net|to|pe|cc)/(?:v|e)/([a-zA-Z0-9_-]+)",
+        RegexOption.IGNORE_CASE
     )
 
     private val TIKTOK_REGEX = Regex(
@@ -152,6 +159,37 @@ object MediaParser {
             )
         }
 
+        // Streamtape check
+        STREAMTAPE_REGEX.find(trimmed)?.let { match ->
+            val videoId = match.groupValues[1]
+            return ParsedMedia(
+                type = MediaType.STREAMTAPE,
+                url = trimmed,
+                id = videoId,
+                embedUrl = "https://streamtape.com/e/$videoId/"
+            )
+        }
+        if (isStreamtapeUrl(trimmed)) {
+            val videoId = com.example.video.streamtape.StreamtapeHandler.extractId(trimmed)
+            return ParsedMedia(
+                type = MediaType.STREAMTAPE,
+                url = trimmed,
+                id = videoId,
+                embedUrl = if (videoId != null) "https://streamtape.com/e/$videoId/" else trimmed
+            )
+        }
+
+        // DoodStream check
+        if (isDoodStreamUrl(trimmed)) {
+            val videoId = com.example.video.doodstream.DoodStreamHandler.extractId(trimmed)
+            return ParsedMedia(
+                type = MediaType.DOODSTREAM,
+                url = trimmed,
+                id = videoId,
+                embedUrl = if (videoId != null) "https://dood.to/e/$videoId/" else trimmed
+            )
+        }
+
         // TikTok check
         TIKTOK_REGEX.find(trimmed)?.let { match ->
             val videoId = match.groupValues[1]
@@ -218,6 +256,49 @@ object MediaParser {
     private fun extractTikTokId(url: String): String {
         return url.substringAfter("/video/").substringBefore("?").substringBefore("/")
             .takeIf { it.all { char -> char.isDigit() } } ?: ""
+    }
+
+    fun isStreamtapeUrl(url: String): Boolean {
+        val lower = url.lowercase().trim()
+        return lower.contains("streamtape.com") ||
+                lower.contains("streamtape.net") ||
+                lower.contains("streamtape.to") ||
+                lower.contains("streamta.pe") ||
+                lower.contains("streamtape.cc")
+    }
+
+    fun isDoodStreamUrl(url: String): Boolean {
+        val lower = url.lowercase().trim()
+        return lower.contains("dood.") ||
+                lower.contains("doodstream") ||
+                lower.contains("doodcdn") ||
+                lower.contains("doodapi")
+    }
+
+    fun isYouTubeUrl(url: String): Boolean {
+        val lower = url.lowercase().trim()
+        return lower.contains("youtube.com") || lower.contains("youtu.be")
+    }
+
+    fun isDriveUrl(url: String): Boolean {
+        val lower = url.lowercase().trim()
+        return lower.contains("drive.google.com") || lower.contains("docs.google.com") || lower.contains("drive.usercontent.google.com")
+    }
+
+    fun extractStreamtapeEmbedUrl(url: String): String {
+        return com.example.video.streamtape.StreamtapeHandler.toEmbedUrl(url)
+    }
+
+    fun extractStreamtapeId(url: String): String? {
+        return com.example.video.streamtape.StreamtapeHandler.extractId(url)
+    }
+
+    fun extractDoodStreamEmbedUrl(url: String): String {
+        return com.example.video.doodstream.DoodStreamHandler.toEmbedUrl(url)
+    }
+
+    fun extractDoodStreamId(url: String): String? {
+        return com.example.video.doodstream.DoodStreamHandler.extractId(url)
     }
 
     fun cleanContentText(content: String): String {

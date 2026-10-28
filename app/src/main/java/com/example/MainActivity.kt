@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -362,7 +363,7 @@ fun QSocialApp(
                         )
                     }
                 },
-                containerColor = QBackground
+                containerColor = MaterialTheme.colorScheme.background
             ) { innerPadding ->
                 Box(
                     modifier = Modifier

@@ -1,12 +1,14 @@
 package com.example.ui.theme
 
+import android.app.Activity
 import android.content.Context
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 enum class ThemeMode {
     SYSTEM,
@@ -37,7 +39,7 @@ object ThemePreferences {
 val LocalThemeMode = compositionLocalOf { ThemeMode.SYSTEM }
 val LocalSetThemeMode = compositionLocalOf<(ThemeMode) -> Unit> { {} }
 
-private val QDarkColorScheme = darkColorScheme(
+val QDarkColorScheme = darkColorScheme(
     primary = QYellowPrimary,
     onPrimary = QOnYellow,
     primaryContainer = Color(0xFF78350F),
@@ -58,21 +60,21 @@ private val QDarkColorScheme = darkColorScheme(
     onError = Color.White
 )
 
-private val QLightColorScheme = lightColorScheme(
+val QLightColorScheme = lightColorScheme(
     primary = QYellowDark,
     onPrimary = Color.White,
-    primaryContainer = QYellowContainer,
+    primaryContainer = Color(0xFFFFFBEB),
     onPrimaryContainer = QYellowDark,
     secondary = QYellowPrimary,
     onSecondary = QOnYellow,
-    background = QBackground,
-    onBackground = QOnBackground,
-    surface = QSurface,
-    onSurface = QOnSurface,
-    surfaceVariant = QSurfaceVariant,
-    onSurfaceVariant = QOnSurfaceVariant,
-    outline = QOutline,
-    outlineVariant = QOutlineVariant,
+    background = Color(0xFFF8FAFC),
+    onBackground = Color(0xFF0F172A),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF0F172A),
+    surfaceVariant = Color(0xFFF1F5F9),
+    onSurfaceVariant = Color(0xFF64748B),
+    outline = Color(0xFFE2E8F0),
+    outlineVariant = Color(0xFFCBD5E1),
     error = QLikeRed,
     onError = Color.White
 )
@@ -90,6 +92,18 @@ fun QylomiTheme(
     }
 
     val colorScheme = if (isDark) QDarkColorScheme else QLightColorScheme
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window
+            if (window != null) {
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !isDark
+                insetsController.isAppearanceLightNavigationBars = !isDark
+            }
+        }
+    }
 
     CompositionLocalProvider(
         LocalThemeMode provides themeMode,

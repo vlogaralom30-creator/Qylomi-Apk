@@ -96,7 +96,7 @@ fun SeriesFormView(
             text = if (existingSeries == null) "Create New Series" else "Edit Series Details",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = QOnSurface
         )
 
         // 1. Title & Original Title
@@ -203,7 +203,7 @@ fun SeriesFormView(
         )
 
         // 5. Genres Multi-select Chips
-        Text("Genres", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        Text("Genres", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -248,7 +248,7 @@ fun SeriesFormView(
         }
 
         // 6. Audio Languages Chips
-        Text("Audio Languages", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        Text("Audio Languages", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -304,7 +304,7 @@ fun SeriesFormView(
             Text(
                 text = "Editorial Rating: ${"%.1f".format(ratingSlider)} / 10",
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = QOnSurface,
                 fontSize = 14.sp
             )
             Slider(
@@ -391,7 +391,7 @@ fun SeriesFormView(
         )
 
         // 10. Manual Shelves Linkage
-        Text("Show in Shelves", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        Text("Show in Shelves", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
         if (eligibleShelves.isEmpty()) {
             Surface(
                 shape = RoundedCornerShape(8.dp),
@@ -430,7 +430,7 @@ fun SeriesFormView(
                         Text(
                             text = shelf.title,
                             fontSize = 13.sp,
-                            color = Color.White,
+                            color = QOnSurface,
                             modifier = Modifier.weight(1f)
                         )
                         if (isChecked) {
@@ -459,7 +459,7 @@ fun SeriesFormView(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text("Publish Series", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                Text("Publish Series", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
                 Text(
                     if (isPublished) "Publicly visible on Home & Catalog" else "Draft mode (only you can see)",
                     fontSize = 11.sp,
@@ -480,7 +480,7 @@ fun SeriesFormView(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Featured Series (Admin Only)", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                    Text("Featured Series (Admin Only)", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
                     Text("Eligible for Hero spotlight and high priority promotion", fontSize = 11.sp, color = QOnSurfaceVariant)
                 }
                 Switch(

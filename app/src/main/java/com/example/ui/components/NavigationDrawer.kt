@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -209,6 +211,61 @@ fun QNavigationDrawerSheet(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
             )
+
+            // Quick Dark/Light Theme toggle
+            val currentTheme = LocalThemeMode.current
+            val setTheme = LocalSetThemeMode.current
+            val context = LocalContext.current
+            val isDark = when (currentTheme) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        val nextMode = if (isDark) ThemeMode.LIGHT else ThemeMode.DARK
+                        setTheme(nextMode)
+                        ThemePreferences.setThemeMode(context, nextMode)
+                    }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                        contentDescription = "Theme",
+                        tint = QYellowDark,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(
+                        text = if (isDark) "Dark Theme" else "Light Theme",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Switch(
+                    checked = isDark,
+                    onCheckedChange = { checked ->
+                        val nextMode = if (checked) ThemeMode.DARK else ThemeMode.LIGHT
+                        setTheme(nextMode)
+                        ThemePreferences.setThemeMode(context, nextMode)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = QYellowPrimary,
+                        checkedTrackColor = QYellowDark.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.testTag("drawer_theme_switch")
+                )
+            }
 
             // Settings item
             DrawerItem(

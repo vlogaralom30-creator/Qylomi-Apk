@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
@@ -32,14 +30,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Share
 import com.example.ui.theme.QOnYellow
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -73,8 +68,6 @@ import com.example.ui.theme.QOnSurface
 import com.example.ui.theme.QOnSurfaceVariant
 import com.example.ui.theme.QRelayGreen
 import com.example.ui.theme.QSurface
-import com.example.ui.theme.QSurfaceVariant
-import com.example.ui.theme.QVerifiedBlue
 import com.example.ui.theme.QYellowDark
 import com.example.ui.theme.QYellowLight
 import com.example.ui.theme.QYellowPrimary
@@ -106,27 +99,32 @@ fun PostCard(
     var showMenu by remember { mutableStateOf(false) }
     val isOwner = currentUserId != null && currentUserId == post.userId
 
+    val pixelArt = post.effectivePixelArt
+    val videoInfo = post.videoDetails
+    val photoInfo = post.photoDetails
+    val textInfo = post.textDetails
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(QSurface)
             .testTag("post_card_${post.id}")
     ) {
+        // 1. Pic - Name - Badge - 3dot (Header), Title, and Read now / text content (with 16dp horizontal padding)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             // Author row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 UserAvatar(
                     avatarUrl = author.avatarUrl,
                     initials = author.initials,
-                    size = 46.dp,
+                    size = 44.dp,
                     modifier = Modifier.clickable { onAuthorClick(author) }
                 )
 
@@ -180,7 +178,7 @@ fun PostCard(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.PushPin,
+                                imageVector = Icons.Default.PushPin,
                                 contentDescription = "Pinned",
                                 tint = QOnYellow,
                                 modifier = Modifier.size(12.dp)
@@ -226,7 +224,7 @@ fun PostCard(
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
+                            imageVector = Icons.Default.MoreVert,
                             contentDescription = "More Options",
                             tint = QOnSurfaceVariant,
                             modifier = Modifier.size(18.dp)
@@ -242,7 +240,7 @@ fun PostCard(
                                 text = { Text("Edit Post") },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = androidx.compose.material.icons.Icons.Default.Edit,
+                                        imageVector = Icons.Default.Edit,
                                         contentDescription = null
                                     )
                                 },
@@ -255,7 +253,7 @@ fun PostCard(
                                 text = { Text("Delete Post", color = QLikeRed) },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = androidx.compose.material.icons.Icons.Default.Delete,
+                                        imageVector = Icons.Default.Delete,
                                         contentDescription = null,
                                         tint = QLikeRed
                                     )
@@ -270,27 +268,21 @@ fun PostCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Post Title (if available)
+            // Title
             if (!post.title.isNullOrBlank()) {
                 Text(
                     text = post.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = QOnSurface,
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
 
-            // Post Content / Sub-Table Type Specific Rendering
-            val pixelArt = post.effectivePixelArt
-            val videoInfo = post.videoDetails
-            val photoInfo = post.photoDetails
-            val textInfo = post.textDetails
-
+            // Read now / content text
             when {
-                // Pixel Art Vector Canvas
                 pixelArt != null -> {
                     val cleanText = com.example.util.PixelArtUtils.stripPixelArtComment(post.content)
                     if (cleanText.isNotBlank()) {
@@ -298,16 +290,86 @@ fun PostCard(
                             text = cleanText,
                             fontSize = 14.sp,
                             color = QOnSurface,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
+                }
+                videoInfo != null || post.type.equals("Video", ignoreCase = true) || (!post.externalUrl.isNullOrBlank() && com.example.video.VideoPlatformRegistry.resolve(post.externalUrl).platformId != "direct") -> {
+                    if (post.content.isNotBlank() && post.content != post.title) {
+                        Text(
+                            text = post.content,
+                            fontSize = 14.sp,
+                            color = QOnSurface,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                }
+                photoInfo != null || post.type.equals("Photo", ignoreCase = true) -> {
+                    val caption = photoInfo?.caption ?: post.content
+                    if (caption.isNotBlank() && caption != post.title) {
+                        Text(
+                            text = caption,
+                            fontSize = 14.sp,
+                            color = QOnSurface,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                }
+                textInfo != null || post.type.equals("Text", ignoreCase = true) -> {
+                    // Handled in media section
+                }
+                else -> {
+                    val cleanContent = remember(post.content) {
+                        MediaParser.cleanContentText(post.content)
+                    }
+                    var isExpanded by remember { mutableStateOf(false) }
+                    val isLongText = remember(cleanContent) {
+                        cleanContent.length > 220 || cleanContent.lines().size > 4
+                    }
+
+                    if (cleanContent.isNotBlank()) {
+                        Text(
+                            text = cleanContent,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = QOnSurface,
+                            maxLines = if (isExpanded) Int.MAX_VALUE else 4,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        if (isLongText) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isExpanded) "Show less" else "Read now...",
+                                color = QYellowDark,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                modifier = Modifier
+                                    .clickable { isExpanded = !isExpanded }
+                                    .padding(vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Video - image - pixels - others 2side 0speach (Edge-to-edge media with 0 side spacing)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+        ) {
+            when {
+                // Pixel Art Viewer
+                pixelArt != null -> {
                     PixelArtViewer(
                         data = pixelArt,
-                        title = post.title ?: "Hand-Drawn Pixel Art"
+                        title = post.title ?: "Hand-Drawn Pixel Art",
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                // 1. Video Post Sub-Table (or Type == "Video" or externalUrl is a video link)
+                // Video Post
                 videoInfo != null || post.type.equals("Video", ignoreCase = true) || (!post.externalUrl.isNullOrBlank() && com.example.video.VideoPlatformRegistry.resolve(post.externalUrl).platformId != "direct") -> {
                     val rawUrl = videoInfo?.videoUrl?.takeIf { it.isNotBlank() }
                         ?: post.externalUrl?.takeIf { it.isNotBlank() }
@@ -355,8 +417,6 @@ fun PostCard(
                             } else null
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
-
                         var isPlayerActive by remember(post.id) {
                             mutableStateOf(
                                 if (handler.platformId == "youtube") {
@@ -367,7 +427,6 @@ fun PostCard(
                             )
                         }
 
-                        // Reclaim resources and explicitly pause video when card moves out of viewport or is disposed
                         DisposableEffect(post.id, handler.platformId) {
                             onDispose {
                                 if (handler.platformId == "youtube") {
@@ -389,18 +448,14 @@ fun PostCard(
                                     }
                                 }
                         ) {
-
                             if (handler.platformId == "youtube" && !isPlayerActive) {
-                                // YouTube Thumbnail Card with Red Play Button Overlay
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(if (isShortOrVertical) 9f / 14f else 16f / 9f)
-                                        .clip(RoundedCornerShape(12.dp))
                                         .background(Color.Black)
                                         .clickable {
-                                            android.util.Log.d("YT_FEED", "Tap received: ${extractedVideo.originalUrl}")
                                             isPlayerActive = true
                                         }
                                 ) {
@@ -418,7 +473,6 @@ fun PostCard(
                                         )
                                     }
 
-                                    // High-Contrast Red Play Button
                                     Box(
                                         contentAlignment = Alignment.Center,
                                         modifier = Modifier
@@ -434,7 +488,6 @@ fun PostCard(
                                         )
                                     }
 
-                                    // Platform Badge
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopStart)
@@ -454,9 +507,7 @@ fun PostCard(
                             } else {
                                 handler.Player(
                                     video = extractedVideo,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp)),
+                                    modifier = Modifier.fillMaxWidth(),
                                     config = com.example.video.PlayerConfig(
                                         autoPlay = isPlayerActive,
                                         showControls = true
@@ -465,7 +516,6 @@ fun PostCard(
                                 )
                             }
 
-                            // Open in Reels badge for vertical video posts
                             if (isShortOrVertical && onOpenReels != null) {
                                 Box(
                                     modifier = Modifier
@@ -497,78 +547,52 @@ fun PostCard(
                     }
                 }
 
-                // 2. Photo Post Sub-Table (or Type == "Photo")
+                // Photo Gallery
                 photoInfo != null || post.type.equals("Photo", ignoreCase = true) -> {
                     val urls = photoInfo?.photoUrls?.takeIf { it.isNotEmpty() }
                         ?: listOfNotNull(post.externalUrl?.takeIf { it.isNotBlank() })
                     if (urls.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(6.dp))
                         PhotoPostGallery(
                             photoUrls = urls,
-                            caption = photoInfo?.caption ?: post.content
+                            caption = photoInfo?.caption ?: post.content,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
 
-                // 3. Text / Thought Post Sub-Table (or Type == "Text")
+                // Text Post Card
                 textInfo != null || post.type.equals("Text", ignoreCase = true) -> {
                     val caption = textInfo?.caption ?: post.content
                     if (caption.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        StyledTextPostCard(
-                            content = caption,
-                            templateId = textInfo?.bgColor ?: "preset_default",
-                            category = textInfo?.category
-                        )
-                    }
-                }
-
-                // 4. Legacy / General Post Format
-                else -> {
-                    val cleanContent = remember(post.content) {
-                        MediaParser.cleanContentText(post.content)
-                    }
-                    var isExpanded by remember { mutableStateOf(false) }
-                    val isLongText = remember(cleanContent) {
-                        cleanContent.length > 220 || cleanContent.lines().size > 4
-                    }
-
-                    if (cleanContent.isNotBlank()) {
-                        Text(
-                            text = cleanContent,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = QOnSurface,
-                            maxLines = if (isExpanded) Int.MAX_VALUE else 4,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        if (isLongText) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (isExpanded) "Show less" else "Read more...",
-                                color = QYellowDark,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                modifier = Modifier
-                                    .clickable { isExpanded = !isExpanded }
-                                    .padding(vertical = 2.dp)
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            StyledTextPostCard(
+                                content = caption,
+                                templateId = textInfo?.bgColor ?: "preset_default",
+                                category = textInfo?.category
                             )
                         }
                     }
+                }
 
-                    // Embedded Media Player fallback (YouTube, TikTok, Drive, Direct Video/Image)
+                // Generic Link
+                else -> {
                     val parsedMedia = remember(post) { MediaParser.parseMedia(post) }
                     if (parsedMedia != null) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        EmbeddedMediaPlayer(media = parsedMedia)
+                        EmbeddedMediaPlayer(
+                            media = parsedMedia,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Interactions row
+        // 3. Like - Track - Comments - Share (Action bar) with 16dp horizontal padding
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -585,7 +609,7 @@ fun PostCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .padding(horizontal = 6.dp, vertical = 6.dp)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
                         .testTag("like_button_${post.id}")
                 ) {
                     Icon(
@@ -593,7 +617,7 @@ fun PostCard(
                         contentDescription = "Like",
                         tint = heartTint,
                         modifier = Modifier
-                            .size(19.dp)
+                            .size(20.dp)
                             .clickable { onLikeClick() }
                     )
                     Spacer(modifier = Modifier.width(5.dp))
@@ -612,31 +636,7 @@ fun PostCard(
                     )
                 }
 
-                // Comment button
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onCommentClick() }
-                        .padding(horizontal = 6.dp, vertical = 6.dp)
-                        .testTag("comment_button_${post.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ChatBubbleOutline,
-                        contentDescription = "Comments",
-                        tint = QOnSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = "${post.repliesCount}",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = QOnSurfaceVariant
-                    )
-                }
-
-                // Relay / Repost button
+                // Track / Relay button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -644,13 +644,13 @@ fun PostCard(
                         .clickable {
                             onRelayClick?.invoke(post)
                         }
-                        .padding(horizontal = 6.dp, vertical = 6.dp)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Repeat,
-                        contentDescription = "Relay",
+                        contentDescription = "Track",
                         tint = if (post.isRelayedByMe == true) QRelayGreen else QOnSurfaceVariant,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
@@ -661,7 +661,31 @@ fun PostCard(
                     )
                 }
 
-                // Bookmark button (saved_posts table)
+                // Comment button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onCommentClick() }
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                        .testTag("comment_button_${post.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChatBubbleOutline,
+                        contentDescription = "Comments",
+                        tint = QOnSurfaceVariant,
+                        modifier = Modifier.size(19.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "${post.repliesCount}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = QOnSurfaceVariant
+                    )
+                }
+
+                // Bookmark button
                 IconButton(
                     onClick = onBookmarkClick,
                     modifier = Modifier.size(36.dp)
@@ -670,7 +694,7 @@ fun PostCard(
                         imageVector = if (post.isBookmarkedByMe) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                         contentDescription = "Bookmark",
                         tint = if (post.isBookmarkedByMe) QYellowPrimary else QOnSurfaceVariant,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -691,14 +715,15 @@ fun PostCard(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Share",
                         tint = QOnSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
         }
+
         HorizontalDivider(
-            color = QCardBorder.copy(alpha = 0.5f),
-            thickness = 1.dp
+            color = QCardBorder.copy(alpha = 0.4f),
+            thickness = 0.8.dp
         )
     }
 }
@@ -706,7 +731,6 @@ fun PostCard(
 fun formatTimeAgo(isoString: String?): String {
     if (isoString.isNullOrBlank()) return "just now"
     return try {
-        // Simple relative parser fallback
         if (isoString.contains("T")) {
             val datePart = isoString.substringBefore("T")
             datePart.takeLast(5)

@@ -426,6 +426,7 @@ fun RatingRing(
         label = "ratingProgress"
     )
 
+    val trackColor = QOutline
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center
@@ -434,7 +435,7 @@ fun RatingRing(
             val strokePx = strokeWidth.toPx()
             // Track
             drawArc(
-                color = QOutline,
+                color = trackColor,
                 startAngle = -90f,
                 sweepAngle = 360f,
                 useCenter = false,

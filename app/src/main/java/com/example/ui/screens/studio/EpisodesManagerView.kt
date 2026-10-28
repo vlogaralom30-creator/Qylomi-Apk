@@ -78,7 +78,7 @@ fun EpisodesManagerView(
                     text = "Seasons & Episodes",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color.White
+                    color = QOnSurface
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -331,7 +331,7 @@ fun EpisodeFormView(
             text = if (existingEpisode == null) "New Episode" else "Edit Episode Details",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = QOnSurface
         )
 
         Row(
@@ -424,7 +424,7 @@ fun EpisodeFormView(
         }
 
         // Skip Intro Timings
-        Text("Skip Intro Timestamps (Optional)", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        Text("Skip Intro Timestamps (Optional)", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -453,7 +453,7 @@ fun EpisodeFormView(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text("Publish Episode", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                Text("Publish Episode", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 14.sp)
                 Text(
                     if (!hasActiveSource && existingEpisode != null) "Requires at least 1 active video source" else "Available to viewers",
                     fontSize = 11.sp,
@@ -479,7 +479,7 @@ fun EpisodeFormView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
-                Text("Video Sources / Servers", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp)
+                Text("Video Sources / Servers", fontWeight = FontWeight.Bold, color = QOnSurface, fontSize = 16.sp)
                 Text("Ordered by priority (lower number plays first)", fontSize = 11.sp, color = QOnSurfaceVariant)
             }
             Button(
@@ -692,7 +692,7 @@ private fun SourceItemRow(
                         text = source.label,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = Color.White
+                        color = QOnSurface
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     source.platform?.let { plat ->
@@ -822,6 +822,18 @@ private fun SourceEditorDialog(
     var testResultPlatform by remember { mutableStateOf<String?>(null) }
     var testResultDuration by remember { mutableStateOf<Int?>(null) }
     var isQualityDropdownOpen by remember { mutableStateOf(false) }
+    var showDoodManager by remember { mutableStateOf(false) }
+
+    if (showDoodManager) {
+        com.example.ui.components.DoodStreamManagerDialog(
+            onSelectEmbedUrl = { selectedUrl ->
+                url = selectedUrl
+                platform = "doodstream"
+                label = "DoodStream Server"
+            },
+            onDismiss = { showDoodManager = false }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -846,6 +858,17 @@ private fun SourceEditorDialog(
                     label = { Text("Stream / Video URL *") },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // DoodStream Manager & Uploader Button
+                Button(
+                    onClick = { showDoodManager = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = QYellowDark, contentColor = Color.Black),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(imageVector = Icons.Default.Cloud, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Open DoodStream Manager & Uploader", fontWeight = FontWeight.Bold)
+                }
 
                 // Test URL Button & Platform Detector
                 Button(
@@ -889,7 +912,7 @@ private fun SourceEditorDialog(
                                 fontSize = 12.sp
                             )
                             testResultDuration?.let { dur ->
-                                Text("Duration: ${dur / 60}m ${dur % 60}s", fontSize = 11.sp, color = Color.White)
+                                Text("Duration: ${dur / 60}m ${dur % 60}s", fontSize = 11.sp, color = QOnSurfaceVariant)
                             }
                         }
                     }
@@ -938,7 +961,7 @@ private fun SourceEditorDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("Active Source", fontSize = 13.sp, color = Color.White)
+                    Text("Active Source", fontSize = 13.sp, color = QOnSurface)
                     Switch(
                         checked = isActive,
                         onCheckedChange = { isActive = it },

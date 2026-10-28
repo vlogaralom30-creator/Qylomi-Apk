@@ -141,7 +141,7 @@ fun CreatorStudioScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = QBackground,
-                    titleContentColor = Color.White
+                    titleContentColor = QOnSurface
                 )
             )
         },
@@ -515,7 +515,7 @@ private fun CreatorSeriesCard(
                         text = series.title,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = QOnSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -684,7 +684,7 @@ private fun EmptyStudioState(onCreateClick: () -> Unit) {
             text = "No Series Created Yet",
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = QOnSurface
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(

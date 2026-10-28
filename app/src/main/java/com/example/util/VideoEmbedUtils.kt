@@ -61,6 +61,10 @@ object VideoEmbedUtils {
                 val fileId = parsed?.videoId?.substringBefore("|")
                 if (fileId != null) "https://drive.google.com/file/d/$fileId/preview" else trimmed
             }
+            "streamtape" -> {
+                val videoId = parsed?.videoId ?: com.example.video.streamtape.StreamtapeHandler.extractId(trimmed)
+                if (videoId != null) "https://streamtape.com/e/$videoId/" else trimmed
+            }
             else -> trimmed
         }
 

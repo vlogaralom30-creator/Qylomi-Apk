@@ -130,10 +130,12 @@ fun EpisodePlayerView(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val resolvedUrl = remember(rawVideoUrl) { resolveStreamUrl(rawVideoUrl) }
+    val detectedEmbed = remember(resolvedUrl) { com.example.util.VideoEmbedUtils.parseVideoUrl(resolvedUrl) }
+    val isEmbedVideo = remember(detectedEmbed) { detectedEmbed.platform != "direct" }
 
     var isPlaying by remember { mutableStateOf(true) }
-    var isBuffering by remember { mutableStateOf(true) }
-    var isFirstFrameRendered by remember { mutableStateOf(false) }
+    var isBuffering by remember { mutableStateOf(!isEmbedVideo) }
+    var isFirstFrameRendered by remember { mutableStateOf(isEmbedVideo) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var currentPosSec by remember { mutableIntStateOf(initialPositionSec) }
     var totalDurationSec by remember { mutableIntStateOf(0) }
@@ -209,8 +211,8 @@ fun EpisodePlayerView(
     }
 
     // Load media item
-    LaunchedEffect(resolvedUrl) {
-        if (resolvedUrl.isNotBlank()) {
+    LaunchedEffect(resolvedUrl, isEmbedVideo) {
+        if (!isEmbedVideo && resolvedUrl.isNotBlank()) {
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
             isBuffering = true
@@ -222,6 +224,10 @@ fun EpisodePlayerView(
                 exoPlayer.seekTo(initialPositionSec * 1000L)
             }
             exoPlayer.playWhenReady = true
+        } else if (isEmbedVideo) {
+            isBuffering = false
+            isFirstFrameRendered = true
+            errorMessage = null
         }
     }
 
@@ -433,27 +439,35 @@ fun EpisodePlayerView(
             )
         }
 
-        // ExoPlayer Surface View
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    resizeMode = if (isFillMode) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                }
-            },
-            update = { playerView ->
-                if (playerView.player != exoPlayer) {
-                    playerView.player = exoPlayer
-                }
-                playerView.resizeMode = if (isFillMode) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        // Video View Surface: Embedded iframe video or ExoPlayer Surface
+        if (isEmbedVideo) {
+            EmbedVideoPlayer(
+                videoUrl = resolvedUrl,
+                title = episodeTitle ?: seriesTitle,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = false
+                        resizeMode = if (isFillMode) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    }
+                },
+                update = { playerView ->
+                    if (playerView.player != exoPlayer) {
+                        playerView.player = exoPlayer
+                    }
+                    playerView.resizeMode = if (isFillMode) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // Floating Gesture Feedback Badge (Brightness / Volume / 2x Speed)
         if (gestureFeedbackText != null) {

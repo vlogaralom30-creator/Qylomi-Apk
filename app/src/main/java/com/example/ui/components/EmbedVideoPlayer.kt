@@ -67,6 +67,7 @@ fun EmbedVideoPlayer(
 
     val platformColor = when (detectedInfo.platform) {
         "youtube" -> Color(0xFFFF0000)
+        "streamtape" -> Color(0xFF00ADB5)
         "tiktok" -> Color(0xFF00F2FE)
         "facebook" -> Color(0xFF1877F2)
         "instagram" -> Color(0xFFE4405F)
@@ -220,12 +221,13 @@ fun EmbedVideoPlayer(
                                         </style>
                                     </head>
                                     <body>
-                                        <iframe src="${detectedInfo.embedUrl}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                                        <iframe src="${detectedInfo.embedUrl}" width="100%" height="100%" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen allowtransparency scrolling="no" frameborder="0"></iframe>
                                     </body>
                                     </html>
                                 """.trimIndent()
 
                                 val baseUrl = when (detectedInfo.platform) {
+                                    "streamtape" -> "https://streamtape.com"
                                     "tiktok" -> "https://www.tiktok.com"
                                     "facebook" -> "https://www.facebook.com"
                                     "instagram" -> "https://www.instagram.com"

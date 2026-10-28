@@ -353,7 +353,7 @@ fun AdminStudioScreen(
                                     else -> "User (Viewer Only)"
                                 },
                                 fontSize = 14.sp,
-                                color = Color.White
+                                color = QOnSurface
                             )
                         }
                     }
@@ -447,7 +447,7 @@ private fun ModerationTabView(
                                     text = s.title,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
-                                    color = Color.White,
+                                    color = QOnSurface,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Surface(
@@ -572,7 +572,7 @@ private fun ModerationTabView(
 
                                     if (!r.details.isNullOrBlank()) {
                                         Spacer(modifier = Modifier.height(4.dp))
-                                        Text(r.details, fontSize = 12.sp, color = Color.White)
+                                        Text(r.details, fontSize = 12.sp, color = QOnSurface)
                                     }
 
                                     r.source?.let { src ->
@@ -653,7 +653,7 @@ private fun ShelvesTabView(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Home Screen Shelves", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+            Text("Home Screen Shelves", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = QOnSurface)
             Button(
                 onClick = onAddShelf,
                 colors = ButtonDefaults.buttonColors(containerColor = QYellowDark, contentColor = Color.Black),
@@ -684,14 +684,14 @@ private fun ShelvesTabView(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(shelf.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                            Text(shelf.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = QOnSurface)
                             Text("Slug: ${shelf.slug} • Type: ${shelf.type} • Layout: ${shelf.layout}", fontSize = 11.sp, color = QOnSurfaceVariant)
                             Text("Position: ${shelf.position} • Max: ${shelf.maxItems} • Active: ${shelf.isActive}", fontSize = 11.sp, color = QYellowDark)
                         }
 
                         Row {
                             IconButton(onClick = { onEditShelf(shelf) }) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = Color.White)
+                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = QOnSurface)
                             }
                             IconButton(onClick = { onDeleteShelf(shelf.id) }) {
                                 Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
@@ -722,7 +722,7 @@ private fun CategoriesTabView(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Content Categories", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+            Text("Content Categories", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = QOnSurface)
             Button(
                 onClick = onAddCategory,
                 colors = ButtonDefaults.buttonColors(containerColor = QYellowDark, contentColor = Color.Black),
@@ -753,13 +753,13 @@ private fun CategoriesTabView(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text(cat.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                            Text(cat.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = QOnSurface)
                             Text("Slug: ${cat.slug} • Order: ${cat.sortOrder} • Active: ${cat.isActive}", fontSize = 11.sp, color = QOnSurfaceVariant)
                         }
 
                         Row {
                             IconButton(onClick = { onEditCategory(cat) }) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = Color.White)
+                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = QOnSurface)
                             }
                             IconButton(onClick = { onDeleteCategory(cat.id) }) {
                                 Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = Color.Red)
@@ -824,12 +824,12 @@ private fun RolesTabView(
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text(u.initials, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text(u.initials, fontWeight = FontWeight.Bold, color = QOnSurface)
                                 }
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
-                                Text(u.effectiveDisplayName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                                Text(u.effectiveDisplayName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = QOnSurface)
                                 Text("@${u.effectiveUsername}", fontSize = 12.sp, color = QOnSurfaceVariant)
                             }
                         }
@@ -857,7 +857,7 @@ private fun RolesTabView(
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = QSurfaceVariant)
                             ) {
-                                Text("Change Role", fontSize = 11.sp, color = Color.White)
+                                Text("Change Role", fontSize = 11.sp, color = QOnSurface)
                             }
                         }
                     }
