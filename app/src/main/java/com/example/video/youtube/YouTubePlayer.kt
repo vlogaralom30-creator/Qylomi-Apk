@@ -354,19 +354,6 @@ fun YouTubePlayer(
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (!video.thumbnailUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = video.thumbnailUrl,
-                                contentDescription = video.title ?: "YouTube Video",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.45f))
-                            )
-                        }
                         CircularProgressIndicator(
                             color = QYellowPrimary,
                             modifier = Modifier.size(36.dp),

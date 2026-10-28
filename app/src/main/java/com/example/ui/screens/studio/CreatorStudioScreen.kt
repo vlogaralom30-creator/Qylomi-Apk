@@ -42,7 +42,8 @@ import com.example.ui.viewmodel.CreatorStudioViewModel
 fun CreatorStudioScreen(
     viewModel: CreatorStudioViewModel,
     currentUser: UserProfile?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenRewards: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -238,13 +239,114 @@ fun CreatorStudioScreen(
                             CircularProgressIndicator(color = QYellowDark)
                         }
                     } else if (mySeries.isEmpty()) {
-                        EmptyStudioState(onCreateClick = { isCreatingSeries = true })
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            if (onOpenRewards != null) {
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = QYellowLight),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, QYellowPrimary.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenRewards() }
+                                        .testTag("creator_studio_rewards_banner_empty")
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.EmojiEvents,
+                                            contentDescription = null,
+                                            tint = QYellowDark,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Creator Rewards & Milestones",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = QYellowDark
+                                            )
+                                            Text(
+                                                text = "Earn points on likes and shares to unlock perks",
+                                                fontSize = 12.sp,
+                                                color = Color.Black.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { onOpenRewards() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Text("View", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                            EmptyStudioState(onCreateClick = { isCreatingSeries = true })
+                        }
                     } else {
                         LazyColumn(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
+                            if (onOpenRewards != null) {
+                                item {
+                                    Card(
+                                        shape = RoundedCornerShape(16.dp),
+                                        colors = CardDefaults.cardColors(containerColor = QYellowLight),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, QYellowPrimary.copy(alpha = 0.5f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onOpenRewards() }
+                                            .testTag("creator_studio_rewards_banner")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.EmojiEvents,
+                                                contentDescription = null,
+                                                tint = QYellowDark,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Creator Rewards & Milestones",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 15.sp,
+                                                    color = QYellowDark
+                                                )
+                                                Text(
+                                                    text = "Earn points on likes and shares to unlock perks",
+                                                    fontSize = 12.sp,
+                                                    color = Color.Black.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                            Button(
+                                                onClick = { onOpenRewards() },
+                                                colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("View", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             items(mySeries, key = { it.id }) { series ->
                                 CreatorSeriesCard(
                                     series = series,

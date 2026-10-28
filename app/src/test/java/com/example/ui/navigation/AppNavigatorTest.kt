@@ -103,5 +103,10 @@ class AppNavigatorTest {
         assertEquals("series123", topPlayer.seriesId)
         assertEquals("ep456", topPlayer.episodeId)
         assertEquals(120, topPlayer.startPositionSec)
+
+        // Test CreatorRewards encoding and decoding
+        val encodedRewards = AppNavigator.encodeDestination(AppDestination.CreatorRewards)
+        assertEquals("creator_rewards", encodedRewards)
+        assertEquals(AppDestination.CreatorRewards, AppNavigator.decodeDestination(encodedRewards))
     }
 }

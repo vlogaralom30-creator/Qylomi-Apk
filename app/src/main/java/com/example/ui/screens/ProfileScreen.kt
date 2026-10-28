@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Logout
@@ -207,7 +208,8 @@ fun ProfileScreen(
     onOpenMenu: ((Post) -> Unit)? = null,
     onLikersClick: ((Post) -> Unit)? = null,
     onOpenCreatorStudio: (() -> Unit)? = null,
-    onOpenAdminStudio: (() -> Unit)? = null
+    onOpenAdminStudio: (() -> Unit)? = null,
+    onOpenRewards: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -405,7 +407,10 @@ fun ProfileScreen(
                         // Creator Rank and Points badges
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = if (onOpenRewards != null) {
+                                Modifier.clickable { onOpenRewards() }
+                            } else Modifier
                         ) {
                             CreatorRankChip(rank = profile.creatorRank, level = profile.creatorLevel)
                             PointsBadge(points = profile.points)
@@ -835,6 +840,46 @@ fun ProfileScreen(
             }
 
             "Points" -> {
+                if (onOpenRewards != null) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = QYellowLight),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, QYellowPrimary.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp)
+                                .clickable { onOpenRewards() }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.EmojiEvents,
+                                    contentDescription = null,
+                                    tint = QYellowDark,
+                                    modifier = Modifier.size(32.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Creator Rewards Hub", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = QYellowDark)
+                                    Text("Track likes, shares, unlock milestones & perks", fontSize = 12.sp, color = QOnSurfaceVariant)
+                                }
+                                Button(
+                                    onClick = { onOpenRewards() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = QYellowPrimary, contentColor = QOnYellow),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("Open", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
                 val history = profile.pointsHistory ?: emptyList()
                 if (history.isEmpty()) {
                     item {

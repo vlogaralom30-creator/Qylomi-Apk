@@ -25,6 +25,7 @@ sealed interface AppDestination {
         val startPositionSec: Int = 0
     ) : AppDestination
     object CreatorStudio : AppDestination
+    object CreatorRewards : AppDestination
     object AdminStudio : AppDestination
     data class CreatePost(val targetGroupId: String? = null) : AppDestination
     data class TagFeed(val tag: String) : AppDestination
@@ -102,6 +103,7 @@ class AppNavigator(
                 is AppDestination.SeriesDetails -> "series_details:${dest.slug}"
                 is AppDestination.EpisodePlayer -> "player:${dest.seriesId}:${dest.episodeId ?: ""}:${dest.startPositionSec}"
                 is AppDestination.CreatorStudio -> "creator_studio"
+                is AppDestination.CreatorRewards -> "creator_rewards"
                 is AppDestination.AdminStudio -> "admin_studio"
                 is AppDestination.CreatePost -> "create_post:${dest.targetGroupId ?: ""}"
                 is AppDestination.TagFeed -> "tag_feed:${dest.tag}"
@@ -132,6 +134,7 @@ class AppNavigator(
                     AppDestination.EpisodePlayer(seriesId, epId, pos)
                 }
                 "creator_studio" -> AppDestination.CreatorStudio
+                "creator_rewards" -> AppDestination.CreatorRewards
                 "admin_studio" -> AppDestination.AdminStudio
                 "create_post" -> {
                     val gId = parts.getOrNull(1)?.takeIf { it.isNotBlank() }

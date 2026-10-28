@@ -87,6 +87,8 @@ import com.example.ui.viewmodel.AdminStudioViewModel
 import com.example.ui.viewmodel.CommentsViewModel
 import com.example.ui.viewmodel.CreatorStudioViewModel
 import com.example.ui.viewmodel.PlayerViewModel
+import com.example.ui.screens.CreatorRewardsScreen
+import com.example.ui.viewmodel.CreatorRewardsViewModel
 import com.example.ui.viewmodel.PostActionsViewModel
 import com.example.ui.viewmodel.SearchViewModel
 import com.example.ui.viewmodel.SeriesViewModel
@@ -141,6 +143,7 @@ fun QSocialApp(
     commentsViewModel: CommentsViewModel = viewModel(factory = appFactory),
     searchViewModel: SearchViewModel = viewModel(factory = appFactory),
     creatorStudioViewModel: CreatorStudioViewModel = viewModel(factory = appFactory),
+    creatorRewardsViewModel: CreatorRewardsViewModel = viewModel(factory = appFactory),
     adminStudioViewModel: AdminStudioViewModel = viewModel(factory = appFactory),
     seriesViewModel: SeriesViewModel = viewModel(factory = appFactory),
     relayViewModel: RelayViewModel = viewModel(factory = appFactory)
@@ -279,6 +282,7 @@ fun QSocialApp(
             drawerContent = {
                 val drawerSelectedDest = when (currentTop) {
                     is AppDestination.CreatorStudio -> DrawerDestination.CREATOR_STUDIO
+                    is AppDestination.CreatorRewards -> DrawerDestination.CREATOR_REWARDS
                     is AppDestination.AdminStudio -> DrawerDestination.ADMIN_STUDIO
                     is AppDestination.SeriesHome, is AppDestination.SeriesDetails, is AppDestination.SeriesList, is AppDestination.EpisodePlayer -> DrawerDestination.SERIES
                     is AppDestination.Groups, is AppDestination.GroupDetails -> DrawerDestination.GROUPS
@@ -305,6 +309,7 @@ fun QSocialApp(
                             DrawerDestination.NOTIFICATIONS -> navigator.switchTab(SocialTab.NOTIFICATIONS)
                             DrawerDestination.SAVED -> navigator.switchTab(SocialTab.PROFILE)
                             DrawerDestination.SERIES -> navigator.replaceAll(AppDestination.SeriesHome)
+                            DrawerDestination.CREATOR_REWARDS -> navigator.replaceAll(AppDestination.CreatorRewards)
                             DrawerDestination.GROUPS -> {
                                 viewModel.loadGroups()
                                 navigator.replaceAll(AppDestination.Groups)
@@ -470,7 +475,8 @@ fun QSocialApp(
                                                     onOpenMenu = { post -> selectedPostForMenu = post },
                                                     onLikersClick = { post -> postActionsViewModel.openLikers(post) },
                                                     onOpenCreatorStudio = if (user.canCreateSeries) { { navigator.push(AppDestination.CreatorStudio) } } else null,
-                                                    onOpenAdminStudio = if (user.isAdmin) { { navigator.push(AppDestination.AdminStudio) } } else null
+                                                    onOpenAdminStudio = if (user.isAdmin) { { navigator.push(AppDestination.AdminStudio) } } else null,
+                                                    onOpenRewards = { navigator.push(AppDestination.CreatorRewards) }
                                                 )
                                             }
                                         }
@@ -506,7 +512,8 @@ fun QSocialApp(
                                                 onOpenMenu = { post -> selectedPostForMenu = post },
                                                 onLikersClick = { post -> postActionsViewModel.openLikers(post) },
                                                 onOpenCreatorStudio = if (profile.id == currentUser?.id && currentUser?.canCreateSeries == true) { { navigator.push(AppDestination.CreatorStudio) } } else null,
-                                                onOpenAdminStudio = if (profile.id == currentUser?.id && currentUser?.isAdmin == true) { { navigator.push(AppDestination.AdminStudio) } } else null
+                                                onOpenAdminStudio = if (profile.id == currentUser?.id && currentUser?.isAdmin == true) { { navigator.push(AppDestination.AdminStudio) } } else null,
+                                                onOpenRewards = { navigator.push(AppDestination.CreatorRewards) }
                                             )
                                         }
 
@@ -636,11 +643,19 @@ fun QSocialApp(
                                                 CreatorStudioScreen(
                                                     viewModel = creatorStudioViewModel,
                                                     currentUser = currentUser!!,
-                                                    onBack = { navigator.pop() }
+                                                    onBack = { navigator.pop() },
+                                                    onOpenRewards = { navigator.push(AppDestination.CreatorRewards) }
                                                 )
                                             } else {
                                                 navigator.pop()
                                             }
+                                        }
+
+                                        is AppDestination.CreatorRewards -> {
+                                            CreatorRewardsScreen(
+                                                viewModel = creatorRewardsViewModel,
+                                                onBack = { navigator.pop() }
+                                            )
                                         }
 
                                         is AppDestination.AdminStudio -> {

@@ -28,7 +28,7 @@ import com.example.data.model.UserProfile
 import com.example.ui.theme.*
 
 enum class DrawerDestination {
-    FEED, SERIES, EXPLORE, GROUPS, REELS, SAVED, NOTIFICATIONS, CREATOR_STUDIO, ADMIN_STUDIO, SETTINGS
+    FEED, SERIES, EXPLORE, GROUPS, REELS, SAVED, NOTIFICATIONS, CREATOR_REWARDS, CREATOR_STUDIO, ADMIN_STUDIO, SETTINGS
 }
 
 @Composable
@@ -178,6 +178,17 @@ fun QNavigationDrawerSheet(
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
+
+                DrawerItem(
+                    label = "Creator Rewards",
+                    icon = Icons.Outlined.EmojiEvents,
+                    selectedIcon = Icons.Filled.EmojiEvents,
+                    isSelected = selectedDestination == DrawerDestination.CREATOR_REWARDS,
+                    badgeText = "EARN",
+                    accentColor = QYellowDark,
+                    onClick = { onDestinationSelect(DrawerDestination.CREATOR_REWARDS) },
+                    testTag = "drawer_item_creator_rewards"
                 )
 
                 if (currentUser.canCreateSeries) {

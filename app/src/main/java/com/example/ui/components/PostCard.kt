@@ -417,104 +417,18 @@ fun PostCard(
                             } else null
                         )
 
-                        var isPlayerActive by remember(post.id) {
-                            mutableStateOf(
-                                if (handler.platformId == "youtube") {
-                                    com.example.video.youtube.YouTubePlayerManager.AUTOPLAY_YOUTUBE_IN_FEED
-                                } else {
-                                    true
-                                }
-                            )
-                        }
-
-                        DisposableEffect(post.id, handler.platformId) {
-                            onDispose {
-                                if (handler.platformId == "youtube") {
-                                    isPlayerActive = false
-                                }
-                            }
-                        }
-
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onGloballyPositioned { coordinates ->
-                                    val parentBounds = coordinates.parentLayoutCoordinates?.boundsInWindow()
-                                    val windowHeight = parentBounds?.height ?: 2400f
-                                    val bounds = coordinates.boundsInWindow()
-                                    val isVisible = bounds.bottom > 0f && bounds.top < windowHeight
-                                    if (!isVisible && handler.platformId == "youtube") {
-                                        isPlayerActive = false
-                                    }
-                                }
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (handler.platformId == "youtube" && !isPlayerActive) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(if (isShortOrVertical) 9f / 14f else 16f / 9f)
-                                        .background(Color.Black)
-                                        .clickable {
-                                            isPlayerActive = true
-                                        }
-                                ) {
-                                    if (!thumb.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = thumb,
-                                            contentDescription = post.title ?: "YouTube Video",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(Color.Black.copy(alpha = 0.28f))
-                                        )
-                                    }
-
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier
-                                            .size(56.dp)
-                                            .clip(CircleShape)
-                                            .background(QLikeRed)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.PlayArrow,
-                                            contentDescription = "Play YouTube",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(34.dp)
-                                        )
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopStart)
-                                            .padding(10.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.Black.copy(alpha = 0.75f))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (parsed?.isShort == true) "YOUTUBE SHORTS" else "YOUTUBE",
-                                            color = Color.White,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Black
-                                        )
-                                    }
-                                }
-                            } else {
-                                handler.Player(
-                                    video = extractedVideo,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    config = com.example.video.PlayerConfig(
-                                        autoPlay = isPlayerActive,
-                                        showControls = true
-                                    ),
-                                    controller = null
-                                )
-                            }
+                            handler.Player(
+                                video = extractedVideo,
+                                modifier = Modifier.fillMaxWidth(),
+                                config = com.example.video.PlayerConfig(
+                                    autoPlay = false,
+                                    showControls = true
+                                ),
+                                controller = null
+                            )
 
                             if (isShortOrVertical && onOpenReels != null) {
                                 Box(
