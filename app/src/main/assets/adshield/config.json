@@ -6,13 +6,18 @@
   "globalAllow": [
     "cdnjs.cloudflare.com",
     "fonts.googleapis.com",
-    "fonts.gstatic.com"
+    "fonts.gstatic.com",
+    "ajax.googleapis.com",
+    "cdn.jsdelivr.net",
+    "unpkg.com",
+    "jwpsrv.com",
+    "vjs.zencdn.net",
+    "code.jquery.com"
   ],
   "hardBlockPaths": [
     "/ads",
     "/adv",
     "/banner",
-    "/pop",
     "/popunder",
     "/vast",
     "/prebid",
@@ -32,76 +37,141 @@
     {
       "id": "streamtape",
       "displayName": "Streamtape",
-      "hostPatterns": ["streamtape.com", "*.streamtape.com", "streamtape.net", "*.streamtape.net", "tapecontent.net", "*.tapecontent.net"],
+      "hostPatterns": [
+        "streamtape.com", "*.streamtape.com",
+        "streamtape.net", "*.streamtape.net",
+        "tapecontent.net", "*.tapecontent.net",
+        "strtape.cloud", "*.strtape.cloud",
+        "strcloud.link", "*.strcloud.link",
+        "stape.fun", "*.stape.fun",
+        "shra.fun", "*.shra.fun",
+        "streamtape.ai", "*.streamtape.ai",
+        "streamta.pe", "*.streamta.pe",
+        "streamtape.site", "*.streamtape.site",
+        "streamtape.cc", "*.streamtape.cc",
+        "streamtape.yachts", "*.streamtape.yachts"
+      ],
       "allowedHosts": [
-        "streamtape.com",
-        "*.streamtape.com",
-        "streamtape.net",
-        "*.streamtape.net",
-        "tapecontent.net",
-        "*.tapecontent.net"
+        "streamtape.com", "*.streamtape.com",
+        "streamtape.net", "*.streamtape.net",
+        "tapecontent.net", "*.tapecontent.net",
+        "strtape.cloud", "*.strtape.cloud",
+        "strcloud.link", "*.strcloud.link",
+        "stape.fun", "*.stape.fun",
+        "shra.fun", "*.shra.fun",
+        "streamtape.ai", "*.streamtape.ai",
+        "streamta.pe", "*.streamta.pe",
+        "streamtape.site", "*.streamtape.site",
+        "streamtape.cc", "*.streamtape.cc",
+        "streamtape.yachts", "*.streamtape.yachts"
       ],
       "mediaCdnHosts": [
-        "tapecontent.net",
-        "*.tapecontent.net",
-        "streamtape.com",
-        "*.streamtape.com"
+        "tapecontent.net", "*.tapecontent.net",
+        "strtape.cloud", "*.strtape.cloud",
+        "streamtape.com", "*.streamtape.com",
+        "strcloud.link", "*.strcloud.link"
       ]
     },
     {
       "id": "doodstream",
       "displayName": "Doodstream",
-      "hostPatterns": ["doodstream.com", "*.doodstream.com", "dood.so", "*.dood.so", "dood.pm", "*.dood.pm", "dood.la", "*.dood.la", "dood.ws", "*.dood.ws", "dood.sh", "*.dood.sh", "ds2play.com", "*.ds2play.com", "doodcdn.com", "*.doodcdn.com"],
+      "hostPatterns": [
+        "doodstream.com", "*.doodstream.com",
+        "dood.so", "*.dood.so",
+        "dood.pm", "*.dood.pm",
+        "dood.la", "*.dood.la",
+        "dood.ws", "*.dood.ws",
+        "dood.sh", "*.dood.sh",
+        "dood.watch", "*.dood.watch",
+        "dood.work", "*.dood.work",
+        "dood.video", "*.dood.video",
+        "do0od.com", "*.do0od.com",
+        "d0000d.com", "*.d0000d.com",
+        "dood.to", "*.dood.to",
+        "doodstream.co", "*.doodstream.co",
+        "ds2play.com", "*.ds2play.com",
+        "doodcdn.com", "*.doodcdn.com"
+      ],
       "allowedHosts": [
-        "doodstream.com",
-        "*.doodstream.com",
-        "dood.so",
-        "*.dood.so",
-        "dood.pm",
-        "*.dood.pm",
-        "dood.la",
-        "*.dood.la",
-        "dood.ws",
-        "*.dood.ws",
-        "dood.sh",
-        "*.dood.sh",
-        "ds2play.com",
-        "*.ds2play.com",
-        "doodcdn.com",
-        "*.doodcdn.com"
+        "doodstream.com", "*.doodstream.com",
+        "dood.so", "*.dood.so",
+        "dood.pm", "*.dood.pm",
+        "dood.la", "*.dood.la",
+        "dood.ws", "*.dood.ws",
+        "dood.sh", "*.dood.sh",
+        "dood.watch", "*.dood.watch",
+        "dood.work", "*.dood.work",
+        "dood.video", "*.dood.video",
+        "do0od.com", "*.do0od.com",
+        "d0000d.com", "*.d0000d.com",
+        "dood.to", "*.dood.to",
+        "doodstream.co", "*.doodstream.co",
+        "ds2play.com", "*.ds2play.com",
+        "doodcdn.com", "*.doodcdn.com"
       ],
       "mediaCdnHosts": [
-        "doodcdn.com",
-        "*.doodcdn.com",
-        "ds2play.com",
-        "*.ds2play.com"
+        "doodcdn.com", "*.doodcdn.com",
+        "ds2play.com", "*.ds2play.com",
+        "do0od.com", "*.do0od.com",
+        "d0000d.com", "*.d0000d.com"
       ]
     },
     {
       "id": "mixdrop",
       "displayName": "Mixdrop",
-      "hostPatterns": ["mixdrop.co", "*.mixdrop.co", "mixdrop.to", "*.mixdrop.to", "mixdrop.sx", "*.mixdrop.sx", "mixdrop.ag", "*.mixdrop.ag", "mixdrop.ch", "*.mixdrop.ch", "mixdrop.bz", "*.mixdrop.bz", "mixdrop.gl", "*.mixdrop.gl"],
+      "hostPatterns": [
+        "mixdrop.co", "*.mixdrop.co",
+        "mixdrop.to", "*.mixdrop.to",
+        "mixdrop.sx", "*.mixdrop.sx",
+        "mixdrop.ag", "*.mixdrop.ag",
+        "mixdrop.ch", "*.mixdrop.ch",
+        "mixdrop.bz", "*.mixdrop.bz",
+        "mixdrop.gl", "*.mixdrop.gl",
+        "mixdrop.vc", "*.mixdrop.vc",
+        "mixdrop.ps", "*.mixdrop.ps",
+        "mixdrop.is", "*.mixdrop.is"
+      ],
       "allowedHosts": [
-        "mixdrop.co",
-        "*.mixdrop.co",
-        "mixdrop.to",
-        "*.mixdrop.to",
-        "mixdrop.sx",
-        "*.mixdrop.sx",
-        "mixdrop.ag",
-        "*.mixdrop.ag",
-        "mixdrop.ch",
-        "*.mixdrop.ch",
-        "mixdrop.bz",
-        "*.mixdrop.bz",
-        "mixdrop.gl",
-        "*.mixdrop.gl"
+        "mixdrop.co", "*.mixdrop.co",
+        "mixdrop.to", "*.mixdrop.to",
+        "mixdrop.sx", "*.mixdrop.sx",
+        "mixdrop.ag", "*.mixdrop.ag",
+        "mixdrop.ch", "*.mixdrop.ch",
+        "mixdrop.bz", "*.mixdrop.bz",
+        "mixdrop.gl", "*.mixdrop.gl",
+        "mixdrop.vc", "*.mixdrop.vc",
+        "mixdrop.ps", "*.mixdrop.ps",
+        "mixdrop.is", "*.mixdrop.is"
       ],
       "mediaCdnHosts": [
-        "mixdrop.co",
-        "*.mixdrop.co",
-        "mixdrop.to",
-        "*.mixdrop.to"
+        "mixdrop.co", "*.mixdrop.co",
+        "mixdrop.to", "*.mixdrop.to",
+        "mixdrop.vc", "*.mixdrop.vc"
+      ]
+    },
+    {
+      "id": "embed",
+      "displayName": "Generic Embed Players",
+      "hostPatterns": [
+        "vidhide.com", "*.vidhide.com",
+        "filemoon.sx", "*.filemoon.sx",
+        "streamwish.top", "*.streamwish.top",
+        "lulustream.com", "*.lulustream.com",
+        "voe.sx", "*.voe.sx"
+      ],
+      "allowedHosts": [
+        "vidhide.com", "*.vidhide.com",
+        "filemoon.sx", "*.filemoon.sx",
+        "streamwish.top", "*.streamwish.top",
+        "lulustream.com", "*.lulustream.com",
+        "voe.sx", "*.voe.sx"
+      ],
+      "mediaCdnHosts": [
+        "vidhide.com", "*.vidhide.com",
+        "filemoon.sx", "*.filemoon.sx",
+        "streamwish.top", "*.streamwish.top",
+        "lulustream.com", "*.lulustream.com",
+        "voe.sx", "*.voe.sx"
       ]
     },
     {

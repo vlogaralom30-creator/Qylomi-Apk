@@ -40,6 +40,14 @@ object AdShieldEngine {
     // Media file extension set
     private val mediaExtensions = setOf("mp4", "m3u8", "ts", "m4s", "mpd", "webm", "vtt")
 
+    // Known aggressive ad network hosts/keywords
+    private val knownAdNetworks = setOf(
+        "popads.net", "popcash.net", "doubleclick.net", "exoclick.com", "juicyads.com",
+        "adsterra.com", "propellerads.com", "googlesyndication.com", "google-analytics.com",
+        "yandex.ru", "clck.ru", "clickadu.com", "hilltopads.com", "adcash.com", "mads.com",
+        "popunder", "pushnotifications", "trackers"
+    )
+
     init {
         updateConfig(AdShieldConfig())
     }
@@ -66,16 +74,15 @@ object AdShieldEngine {
 
     fun getConfig(): AdShieldConfig = currentConfig.get()
 
+    private fun isKnownAdNetwork(host: String): Boolean {
+        if (knownAdNetworks.contains(host) || matchesHashSetParentDomain(host, knownAdNetworks)) {
+            return true
+        }
+        return knownAdNetworks.any { host.contains(it) }
+    }
+
     /**
      * Core decision method evaluated for every WebView request.
-     * Order of evaluation:
-     * 1. Data/Blob/About URIs -> PASS (Handled by JS hardening)
-     * 2. Host in adPermissions -> ALLOW ("permitted ad")
-     * 3. Hard-block path or query rule match -> BLOCK
-     * 4. Media stream file extension check -> Must match active profile CDN
-     * 5. Active Profile allow list match -> ALLOW
-     * 6. Global allow list match -> ALLOW
-     * 7. Fallback -> BLOCK (Default Deny)
      */
     fun evaluateRequest(rawUrl: String, activeProfileId: String?): RequestDecision {
         if (!isEnabled) {
@@ -94,7 +101,11 @@ object AdShieldEngine {
             ?: return RequestDecision.Blocked(trimmed, "unknown", "Invalid Host")
 
         val sanitizedHost = sanitizeHost(host)
-        val activeProfile = activeProfileId?.let { profilesMap[it] }
+
+        // 0. Always block known aggressive ad network domains
+        if (isKnownAdNetwork(sanitizedHost)) {
+            return RequestDecision.Blocked(trimmed, sanitizedHost, "Known Ad Network Host")
+        }
 
         // 1. Host in adPermissions
         if (adPermissionsSet.contains(sanitizedHost) || matchesHashSetParentDomain(sanitizedHost, adPermissionsSet)) {
@@ -106,22 +117,37 @@ object AdShieldEngine {
             return RequestDecision.Blocked(trimmed, sanitizedHost, "Hard Block Rule Match")
         }
 
+        // Resolve active or matching profile dynamically
+        var profile = activeProfileId?.let { profilesMap[it] }
+        if (profile == null) {
+            profile = profilesMap.values.find { p ->
+                matchesHostList(sanitizedHost, p.hostPatterns) ||
+                matchesHostList(sanitizedHost, p.allowedHosts) ||
+                matchesHostList(sanitizedHost, p.mediaCdnHosts)
+            }
+        }
+
         // 3. Media stream check (.mp4, .m3u8, .ts, etc.)
         val extension = extractFileExtension(lowerUrl)
         if (extension != null && mediaExtensions.contains(extension)) {
-            val isProfileMediaHost = activeProfile != null && (
-                matchesHostList(sanitizedHost, activeProfile.mediaCdnHosts) ||
-                matchesHostList(sanitizedHost, activeProfile.allowedHosts)
+            val isProfileMediaHost = profile != null && (
+                matchesHostList(sanitizedHost, profile.mediaCdnHosts) ||
+                matchesHostList(sanitizedHost, profile.allowedHosts)
             )
-            return if (isProfileMediaHost) {
-                RequestDecision.Allowed(trimmed, sanitizedHost, "Active Profile Media CDN")
+            val isGlobalAllowed = globalAllowSet.contains(sanitizedHost) || matchesHashSetParentDomain(sanitizedHost, globalAllowSet)
+            return if (isProfileMediaHost || isGlobalAllowed) {
+                RequestDecision.Allowed(trimmed, sanitizedHost, "Media Stream")
             } else {
                 RequestDecision.Blocked(trimmed, sanitizedHost, "Unapproved Media Stream Host")
             }
         }
 
-        // 4. Active Profile Allow Match
-        if (activeProfile != null && matchesHostList(sanitizedHost, activeProfile.allowedHosts)) {
+        // 4. Active or Matched Profile Allow Match
+        if (profile != null && (
+            matchesHostList(sanitizedHost, profile.allowedHosts) ||
+            matchesHostList(sanitizedHost, profile.hostPatterns) ||
+            matchesHostList(sanitizedHost, profile.mediaCdnHosts)
+        )) {
             return RequestDecision.Allowed(trimmed, sanitizedHost, "Profile Allowed Host")
         }
 
@@ -130,7 +156,12 @@ object AdShieldEngine {
             return RequestDecision.Allowed(trimmed, sanitizedHost, "Global Allow List")
         }
 
-        // 6. Default Deny
+        // 6. Generic Embed Player Profile Support
+        if (profile?.id == "embed" && !isKnownAdNetwork(sanitizedHost)) {
+            return RequestDecision.Allowed(trimmed, sanitizedHost, "Embed Player Resource")
+        }
+
+        // 7. Default Deny
         return RequestDecision.Blocked(trimmed, sanitizedHost, "Default Deny Rule")
     }
 
@@ -204,8 +235,11 @@ object AdShieldEngine {
     }
 
     private fun matchesHardBlockPathOrQuery(rawUrl: String, lowerUrl: String): Boolean {
+        val pathPart = lowerUrl.split('?').first()
         for (pathRule in hardBlockPathsList) {
-            if (lowerUrl.contains(pathRule)) return true
+            if (pathPart.contains(pathRule) && !pathPart.contains("/populate") && !pathPart.contains("/popular")) {
+                return true
+            }
         }
         val queryIndex = rawUrl.indexOf('?')
         if (queryIndex != -1) {
