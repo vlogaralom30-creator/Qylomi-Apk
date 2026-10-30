@@ -253,18 +253,14 @@ fun StreamtapePlayer(
                             userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                             allowFileAccess = true
                         }
-                        webChromeClient = WebChromeClient()
-                        webViewClient = object : WebViewClient() {
+                        webChromeClient = com.example.adshield.ui.AdShieldWebChromeClient()
+                        webViewClient = object : com.example.adshield.ui.AdShieldWebViewClient(activeProfileId = "streamtape") {
                             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                                 hasError = true
                                 try {
                                     view?.destroy()
                                 } catch (_: Exception) {}
                                 return true
-                            }
-
-                            override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
-                                // Ignore non-fatal subresource failures
                             }
                         }
                         loadDataWithBaseURL("https://streamtape.com", htmlData, "text/html", "UTF-8", null)

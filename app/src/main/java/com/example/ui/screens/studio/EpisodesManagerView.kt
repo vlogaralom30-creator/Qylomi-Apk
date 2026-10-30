@@ -1,6 +1,7 @@
 package com.example.ui.screens.studio
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -854,10 +855,55 @@ private fun SourceEditorDialog(
 
                 OutlinedTextField(
                     value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Stream / Video URL *") },
+                    onValueChange = { input ->
+                        url = input
+                        if (com.example.util.VideoEmbedUtils.isIframeEmbedCode(input)) {
+                            val extracted = com.example.util.VideoEmbedUtils.extractUrlFromInput(input)
+                            val info = com.example.util.VideoEmbedUtils.parseVideoUrl(extracted)
+                            platform = info.platform
+                            if (label.isBlank() || label.startsWith("Server ")) {
+                                label = "${info.platform.replaceFirstChar { it.uppercase() }} Server"
+                            }
+                        }
+                    },
+                    label = { Text("Stream URL or <iframe> Embed Code *") },
+                    placeholder = { Text("https://... or <iframe src=\"...\"></iframe>") },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (com.example.util.VideoEmbedUtils.isIframeEmbedCode(url)) {
+                    val extractedUrl = remember(url) { com.example.util.VideoEmbedUtils.extractUrlFromInput(url) }
+                    val detectedInfo = remember(extractedUrl) { com.example.util.VideoEmbedUtils.parseVideoUrl(extractedUrl) }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF00ADB5).copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, Color(0xFF00ADB5)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(imageVector = Icons.Default.Code, contentDescription = null, tint = Color(0xFF00ADB5), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "<iframe> Embed Code Auto-Detected",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00ADB5),
+                                    fontSize = 12.sp
+                                )
+                                Text(
+                                    text = "Host: ${detectedInfo.platform.uppercase()} • Extracted URL: $extractedUrl",
+                                    fontSize = 11.sp,
+                                    color = QOnSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // DoodStream Manager & Uploader Button
                 Button(
@@ -873,12 +919,13 @@ private fun SourceEditorDialog(
                 // Test URL Button & Platform Detector
                 Button(
                     onClick = {
-                        if (!url.trim().startsWith("http://") && !url.trim().startsWith("https://")) {
-                            Toast.makeText(context, "URL must start with http:// or https://", Toast.LENGTH_SHORT).show()
+                        val cleanUrl = com.example.util.VideoEmbedUtils.extractUrlFromInput(url).trim()
+                        if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+                            Toast.makeText(context, "URL must start with http:// or https:// (or contain a valid <iframe>)", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isTesting = true
-                        viewModel.testVideoUrl(url) { detectedPlat, dur, _, _ ->
+                        viewModel.testVideoUrl(cleanUrl) { detectedPlat, dur, _, _ ->
                             isTesting = false
                             platform = detectedPlat
                             testResultPlatform = detectedPlat
@@ -973,9 +1020,9 @@ private fun SourceEditorDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val trimmedUrl = url.trim()
+                    val trimmedUrl = com.example.util.VideoEmbedUtils.extractUrlFromInput(url).trim()
                     if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
-                        Toast.makeText(context, "URL must start with http:// or https://", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "URL must start with http:// or https:// (or contain a valid <iframe>)", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
 

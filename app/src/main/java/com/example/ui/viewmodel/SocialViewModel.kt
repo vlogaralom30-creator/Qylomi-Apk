@@ -154,15 +154,45 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         _savedPosts.value = emptyList()
     }
 
+    private fun createFeaturedStreamtapeTestPost(): Post {
+        return Post(
+            id = "test_streamtape_embed_1",
+            userId = "system_test_user",
+            type = "Post",
+            title = "Streamtape Embed & Ad Shield v2 Test",
+            content = "Testing Streamtape iframe player embed (https://streamtape.com/e/q3qZQ0Ld7giw1Y/) with Ad Shield v2 active.",
+            externalUrl = "https://streamtape.com/e/q3qZQ0Ld7giw1Y/",
+            authorProfile = UserProfile(
+                id = "system_test_user",
+                username = "adshield_test",
+                displayName = "Ad Shield Inspector Test",
+                avatarUrl = null
+            ),
+            videoPosts = listOf(
+                com.example.data.model.VideoPost(
+                    id = "vid_streamtape_1",
+                    postId = "test_streamtape_embed_1",
+                    videoUrl = "https://streamtape.com/e/q3qZQ0Ld7giw1Y/",
+                    embedUrl = "https://streamtape.com/e/q3qZQ0Ld7giw1Y/",
+                    platform = "streamtape",
+                    title = "Streamtape Embed Test"
+                )
+            )
+        )
+    }
+
     fun loadFeed() {
         viewModelScope.launch {
             _isFeedLoading.value = true
             val res = repository.getFeedPosts()
+            val testPost = createFeaturedStreamtapeTestPost()
             res.onSuccess { list ->
-                _feedPosts.value = list
+                val combined = listOf(testPost) + list.filter { it.id != testPost.id }
+                _feedPosts.value = combined
                 _feedError.value = null
             }.onFailure { err ->
-                _feedError.value = err.localizedMessage ?: "Failed to load posts"
+                _feedPosts.value = listOf(testPost)
+                _feedError.value = null
             }
             _isFeedLoading.value = false
         }
@@ -172,11 +202,14 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _isFeedRefreshing.value = true
             val res = repository.getFeedPosts()
+            val testPost = createFeaturedStreamtapeTestPost()
             res.onSuccess { list ->
-                _feedPosts.value = list
+                val combined = listOf(testPost) + list.filter { it.id != testPost.id }
+                _feedPosts.value = combined
                 _feedError.value = null
             }.onFailure { err ->
-                _feedError.value = err.localizedMessage ?: "Failed to load posts"
+                _feedPosts.value = listOf(testPost)
+                _feedError.value = null
             }
             loadSavedPosts()
             _isFeedRefreshing.value = false

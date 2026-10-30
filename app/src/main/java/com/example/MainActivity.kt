@@ -214,6 +214,10 @@ fun QSocialApp(
     val commentLikers by commentsViewModel.commentLikers.collectAsState()
     val isCommentLikersLoading by commentsViewModel.isCommentLikersLoading.collectAsState()
 
+    // Series ViewModel State
+    val seriesShelves by seriesViewModel.shelves.collectAsState()
+    val seriesWatchlistIds by seriesViewModel.watchlistIds.collectAsState()
+
     // Drawer and Unified Navigator
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
@@ -446,7 +450,10 @@ fun QSocialApp(
                                                     viewModel.viewUserProfile(author)
                                                     navigator.push(AppDestination.UserProfile(author.id))
                                                 },
-                                                onRefresh = { viewModel.refreshFeed() },
+                                                onRefresh = {
+                                                    viewModel.refreshFeed()
+                                                    seriesViewModel.loadHomeData(isRefresh = true)
+                                                },
                                                 onCreatePostClick = { navigator.push(AppDestination.CreatePost()) },
                                                 onEditPostClick = { post -> editingPost = post },
                                                 onDeletePostClick = { post -> viewModel.deletePost(post.id) { _, _ -> } },
@@ -459,7 +466,12 @@ fun QSocialApp(
                                                 onLikersClick = { post -> postActionsViewModel.openLikers(post) },
                                                 onRelayClick = { post -> selectedPostForRelay = post },
                                                 feedError = feedError,
-                                                onRetryFeed = { viewModel.loadFeed() }
+                                                onRetryFeed = { viewModel.loadFeed() },
+                                                seriesShelves = seriesShelves,
+                                                watchlistIds = seriesWatchlistIds,
+                                                onSeriesClick = { slug -> navigator.push(AppDestination.SeriesDetails(slug)) },
+                                                onWatchlistToggle = { card -> seriesViewModel.toggleWatchlist(card.id, onAuthRequired = {}) },
+                                                onSeeAllSeriesClick = { navigator.push(AppDestination.SeriesHome) }
                                             )
                                         }
 

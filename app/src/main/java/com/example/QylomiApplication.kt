@@ -25,6 +25,9 @@ class QylomiApplication : Application() {
 
             // Initialize SessionManager with application context
             SessionManager.getInstance(this)
+
+            // Initialize Ad Shield v2 repository
+            com.example.adshield.repository.AdShieldConfigRepository.initialize(this)
         } catch (_: Throwable) {}
     }
 

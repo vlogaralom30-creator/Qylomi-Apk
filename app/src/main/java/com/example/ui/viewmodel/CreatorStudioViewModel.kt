@@ -517,10 +517,12 @@ class CreatorStudioViewModel(application: Application) : AndroidViewModel(applic
         onResult: (platform: String, durationSec: Int?, previewUrl: String?, title: String?) -> Unit
     ) {
         viewModelScope.launch {
-            val trimmed = url.trim()
-            val lower = trimmed.lowercase()
+            val cleanUrl = com.example.util.VideoEmbedUtils.extractUrlFromInput(url).trim()
+            val embedInfo = com.example.util.VideoEmbedUtils.parseVideoUrl(cleanUrl)
+            val lower = cleanUrl.lowercase()
 
             val detectedPlatform = when {
+                embedInfo.platform != "direct" -> embedInfo.platform
                 lower.contains(".m3u8") || lower.contains("/manifest/video.m3u8") -> "hls"
                 lower.contains("cloudflarestream.com") || lower.contains("videodelivery.net") -> "cloudflare"
                 lower.contains("youtube.com") || lower.contains("youtu.be") -> "youtube"
@@ -534,7 +536,7 @@ class CreatorStudioViewModel(application: Application) : AndroidViewModel(applic
             var title: String? = null
 
             try {
-                val extracted = VideoPlatformRegistry.extract(trimmed).getOrNull()
+                val extracted = VideoPlatformRegistry.extract(cleanUrl).getOrNull()
                 if (extracted != null) {
                     duration = extracted.durationSec
                     preview = extracted.directUrl ?: extracted.embedUrl

@@ -1,0 +1,163 @@
+{
+  "version": 2,
+  "lastUpdated": "2026-10-30T00:00:00Z",
+  "relaxOnFailure": false,
+  "adPermissions": [],
+  "globalAllow": [
+    "cdnjs.cloudflare.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com"
+  ],
+  "hardBlockPaths": [
+    "/ads",
+    "/adv",
+    "/banner",
+    "/pop",
+    "/popunder",
+    "/vast",
+    "/prebid",
+    "/adserver",
+    "/pop.js",
+    "/ad.js",
+    "/advertisement"
+  ],
+  "hardBlockQueryKeys": [
+    "ad_id",
+    "zoneid",
+    "pop_id",
+    "vast_url",
+    "aff_id"
+  ],
+  "profiles": [
+    {
+      "id": "streamtape",
+      "displayName": "Streamtape",
+      "hostPatterns": ["streamtape.com", "*.streamtape.com", "streamtape.net", "*.streamtape.net", "tapecontent.net", "*.tapecontent.net"],
+      "allowedHosts": [
+        "streamtape.com",
+        "*.streamtape.com",
+        "streamtape.net",
+        "*.streamtape.net",
+        "tapecontent.net",
+        "*.tapecontent.net"
+      ],
+      "mediaCdnHosts": [
+        "tapecontent.net",
+        "*.tapecontent.net",
+        "streamtape.com",
+        "*.streamtape.com"
+      ]
+    },
+    {
+      "id": "doodstream",
+      "displayName": "Doodstream",
+      "hostPatterns": ["doodstream.com", "*.doodstream.com", "dood.so", "*.dood.so", "dood.pm", "*.dood.pm", "dood.la", "*.dood.la", "dood.ws", "*.dood.ws", "dood.sh", "*.dood.sh", "ds2play.com", "*.ds2play.com", "doodcdn.com", "*.doodcdn.com"],
+      "allowedHosts": [
+        "doodstream.com",
+        "*.doodstream.com",
+        "dood.so",
+        "*.dood.so",
+        "dood.pm",
+        "*.dood.pm",
+        "dood.la",
+        "*.dood.la",
+        "dood.ws",
+        "*.dood.ws",
+        "dood.sh",
+        "*.dood.sh",
+        "ds2play.com",
+        "*.ds2play.com",
+        "doodcdn.com",
+        "*.doodcdn.com"
+      ],
+      "mediaCdnHosts": [
+        "doodcdn.com",
+        "*.doodcdn.com",
+        "ds2play.com",
+        "*.ds2play.com"
+      ]
+    },
+    {
+      "id": "mixdrop",
+      "displayName": "Mixdrop",
+      "hostPatterns": ["mixdrop.co", "*.mixdrop.co", "mixdrop.to", "*.mixdrop.to", "mixdrop.sx", "*.mixdrop.sx", "mixdrop.ag", "*.mixdrop.ag", "mixdrop.ch", "*.mixdrop.ch", "mixdrop.bz", "*.mixdrop.bz", "mixdrop.gl", "*.mixdrop.gl"],
+      "allowedHosts": [
+        "mixdrop.co",
+        "*.mixdrop.co",
+        "mixdrop.to",
+        "*.mixdrop.to",
+        "mixdrop.sx",
+        "*.mixdrop.sx",
+        "mixdrop.ag",
+        "*.mixdrop.ag",
+        "mixdrop.ch",
+        "*.mixdrop.ch",
+        "mixdrop.bz",
+        "*.mixdrop.bz",
+        "mixdrop.gl",
+        "*.mixdrop.gl"
+      ],
+      "mediaCdnHosts": [
+        "mixdrop.co",
+        "*.mixdrop.co",
+        "mixdrop.to",
+        "*.mixdrop.to"
+      ]
+    },
+    {
+      "id": "facebook",
+      "displayName": "Facebook",
+      "hostPatterns": ["facebook.com", "*.facebook.com", "fb.com", "*.fb.com", "fb.watch", "*.fb.watch", "fbcdn.net", "*.fbcdn.net"],
+      "allowedHosts": [
+        "facebook.com",
+        "*.facebook.com",
+        "fb.com",
+        "*.fb.com",
+        "fbcdn.net",
+        "*.fbcdn.net"
+      ],
+      "mediaCdnHosts": [
+        "fbcdn.net",
+        "*.fbcdn.net"
+      ]
+    },
+    {
+      "id": "instagram",
+      "displayName": "Instagram",
+      "hostPatterns": ["instagram.com", "*.instagram.com", "cdninstagram.com", "*.cdninstagram.com"],
+      "allowedHosts": [
+        "instagram.com",
+        "*.instagram.com",
+        "cdninstagram.com",
+        "*.cdninstagram.com"
+      ],
+      "mediaCdnHosts": [
+        "cdninstagram.com",
+        "*.cdninstagram.com"
+      ]
+    },
+    {
+      "id": "tiktok",
+      "displayName": "TikTok",
+      "hostPatterns": ["tiktok.com", "*.tiktok.com", "byteoversea.com", "*.byteoversea.com", "ibytedtos.com", "*.ibytedtos.com", "tikwm.com", "*.tikwm.com"],
+      "allowedHosts": [
+        "tiktok.com",
+        "*.tiktok.com",
+        "byteoversea.com",
+        "*.byteoversea.com",
+        "ibytedtos.com",
+        "*.ibytedtos.com",
+        "tikwm.com",
+        "*.tikwm.com"
+      ],
+      "mediaCdnHosts": [
+        "byteoversea.com",
+        "*.byteoversea.com",
+        "ibytedtos.com",
+        "*.ibytedtos.com",
+        "tikwm.com",
+        "*.tikwm.com"
+      ]
+    }
+  ]
+}

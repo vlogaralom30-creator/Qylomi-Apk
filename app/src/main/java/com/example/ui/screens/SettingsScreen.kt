@@ -193,6 +193,58 @@ fun SettingsScreen(
             // Data & Storage Section
             item {
                 Text(
+                    text = "PRIVACY & SHIELDING",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                )
+            }
+
+            item {
+                val isShieldEnabled by com.example.adshield.repository.AdShieldConfigRepository.isEnabledFlow.collectAsState()
+                QCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = QYellowPrimary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Block ads in embedded servers",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Default-deny strict domain filter for Streamtape, Doodstream, and embed players",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = isShieldEnabled,
+                                onCheckedChange = { enabled ->
+                                    com.example.adshield.repository.AdShieldConfigRepository.setEnabled(context, enabled)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = QOnYellow,
+                                    checkedTrackColor = QYellowPrimary
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Storage Section
+            item {
+                Text(
                     text = "STORAGE & CACHE",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,

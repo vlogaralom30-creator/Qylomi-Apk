@@ -51,11 +51,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Surface
 import com.example.data.model.Post
+import com.example.data.model.SeriesCard
+import com.example.data.model.Shelf
+import com.example.data.model.ShelfWithItems
 import com.example.data.model.UserProfile
 import com.example.ui.components.CreatorRankChip
 import com.example.ui.components.PointsBadge
 import com.example.ui.components.PostCard
+import com.example.ui.components.SeriesCardItem
 import com.example.ui.components.StoryAvatar
 import com.example.ui.components.UserAvatar
 import com.example.ui.theme.QBackground
@@ -96,7 +104,12 @@ fun FeedScreen(
     onLikersClick: ((Post) -> Unit)? = null,
     onRelayClick: ((Post) -> Unit)? = null,
     feedError: String? = null,
-    onRetryFeed: () -> Unit = onRefresh
+    onRetryFeed: () -> Unit = onRefresh,
+    seriesShelves: List<ShelfWithItems> = emptyList(),
+    watchlistIds: Set<String> = emptySet(),
+    onSeriesClick: ((String) -> Unit)? = null,
+    onWatchlistToggle: ((SeriesCard) -> Unit)? = null,
+    onSeeAllSeriesClick: (() -> Unit)? = null
 ) {
     var storyPreviewProfile by remember { mutableStateOf<UserProfile?>(null) }
 
@@ -107,6 +120,14 @@ fun FeedScreen(
             posts
         } else {
             posts.filter { it.type.equals(selectedCategory, ignoreCase = true) }
+        }
+    }
+
+    val effectiveShelves = remember(seriesShelves) {
+        if (seriesShelves.any { it.items.isNotEmpty() }) {
+            seriesShelves.filter { it.items.isNotEmpty() }
+        } else {
+            getFallbackSeriesShelves()
         }
     }
 
@@ -364,22 +385,59 @@ fun FeedScreen(
                     }
                 }
             } else {
-                // Posts list
-                items(filteredPosts, key = { it.id }) { post ->
-                    Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                        PostCard(
-                            post = post,
-                            onLikeClick = { onLikeClick(post) },
-                            onCommentClick = { onCommentClick(post) },
-                            onBookmarkClick = { onBookmarkClick(post) },
-                            onAuthorClick = onAuthorClick,
-                            currentUserId = currentUser?.id,
-                            onEditPostClick = onEditPostClick,
-                            onDeletePostClick = onDeletePostClick,
-                            onOpenReels = onOpenReels,
-                            onOpenMenu = onOpenMenu,
-                            onLikersClick = onLikersClick,
-                            onRelayClick = onRelayClick
+                // Posts list with side-scrolling series rows
+                filteredPosts.forEachIndexed { index, post ->
+                    item(key = "post_${post.id}") {
+                        Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                            PostCard(
+                                post = post,
+                                onLikeClick = { onLikeClick(post) },
+                                onCommentClick = { onCommentClick(post) },
+                                onBookmarkClick = { onBookmarkClick(post) },
+                                onAuthorClick = onAuthorClick,
+                                currentUserId = currentUser?.id,
+                                onEditPostClick = onEditPostClick,
+                                onDeletePostClick = onDeletePostClick,
+                                onOpenReels = onOpenReels,
+                                onOpenMenu = onOpenMenu,
+                                onLikersClick = onLikersClick,
+                                onRelayClick = onRelayClick
+                            )
+                        }
+                    }
+
+                    // Insert side-scrolling series shelf after index 2 (3rd post), and every 6 posts thereafter
+                    val shelfIndex = when (index) {
+                        2 -> 0
+                        7 -> 1
+                        13 -> 2
+                        19 -> 3
+                        else -> -1
+                    }
+                    if (shelfIndex >= 0 && effectiveShelves.isNotEmpty()) {
+                        val targetShelf = effectiveShelves[shelfIndex % effectiveShelves.size]
+                        item(key = "series_shelf_${shelfIndex}_${targetShelf.shelf.id}") {
+                            FeedSeriesShelfRow(
+                                shelf = targetShelf,
+                                watchlistIds = watchlistIds,
+                                onSeriesClick = { slug -> onSeriesClick?.invoke(slug) },
+                                onWatchlistToggle = { card -> onWatchlistToggle?.invoke(card) },
+                                onSeeAllClick = onSeeAllSeriesClick
+                            )
+                        }
+                    }
+                }
+
+                // If feed has fewer than 3 posts (e.g. 1 or 2 posts), show the series row right after them
+                if (filteredPosts.isNotEmpty() && filteredPosts.size < 3 && effectiveShelves.isNotEmpty()) {
+                    val targetShelf = effectiveShelves.first()
+                    item(key = "series_shelf_short_${targetShelf.shelf.id}") {
+                        FeedSeriesShelfRow(
+                            shelf = targetShelf,
+                            watchlistIds = watchlistIds,
+                            onSeriesClick = { slug -> onSeriesClick?.invoke(slug) },
+                            onWatchlistToggle = { card -> onWatchlistToggle?.invoke(card) },
+                            onSeeAllClick = onSeeAllSeriesClick
                         )
                     }
                 }
@@ -448,4 +506,181 @@ fun FeedScreen(
         }
     }
 }
+}
+
+/**
+ * Side-scrolling Series Cards Row for the Feed
+ */
+@Composable
+fun FeedSeriesShelfRow(
+    shelf: ShelfWithItems,
+    watchlistIds: Set<String>,
+    onSeriesClick: (String) -> Unit,
+    onWatchlistToggle: (SeriesCard) -> Unit,
+    onSeeAllClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    if (shelf.items.isEmpty()) return
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = QSurface),
+        border = BorderStroke(1.dp, QCardBorder),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag("feed_series_shelf_${shelf.shelf.id}")
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 12.dp)
+        ) {
+            // Header: Icon + Shelf Title + "See All"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(QYellowPrimary.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = QYellowDark,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = shelf.shelf.title.ifBlank { "Featured Series" },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = QOnSurface
+                        )
+                        Text(
+                            text = "Swipe to explore anime & series",
+                            fontSize = 11.sp,
+                            color = QOnSurfaceVariant
+                        )
+                    }
+                }
+
+                if (onSeeAllClick != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = QYellowPrimary.copy(alpha = 0.12f),
+                        modifier = Modifier.clickable { onSeeAllClick() }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "See All",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = QYellowDark
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "See All Series",
+                                tint = QYellowDark,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Side-scrolling row of series cards
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(shelf.items, key = { it.id }) { card ->
+                    SeriesCardItem(
+                        card = card,
+                        isInWatchlist = watchlistIds.contains(card.id),
+                        onCardClick = { onSeriesClick(card.slug) },
+                        onWatchlistClick = { onWatchlistToggle(card) },
+                        modifier = Modifier.width(130.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+fun getFallbackSeriesShelves(): List<ShelfWithItems> {
+    val sampleCards = listOf(
+        SeriesCard(
+            id = "s-demon-slayer",
+            slug = "demon-slayer",
+            title = "Demon Slayer: Kimetsu no Yaiba",
+            description = "Tanjiro Kamado, a kindhearted boy who sells charcoal for a living, finds his family slaughtered by a demon.",
+            posterUrl = "https://image.tmdb.org/t/p/w500/xUfRZu2mi8jH6SzQEJGP6tjBuYj.jpg",
+            bannerUrl = "https://image.tmdb.org/t/p/original/nTvM4mhqZlHIvUkIvd6vv79QOqv.jpg",
+            rating = 8.7,
+            status = "ongoing",
+            episodesCount = 26,
+            releaseYear = 2019,
+            genres = listOf("Action", "Fantasy", "Animation")
+        ),
+        SeriesCard(
+            id = "s-solo-leveling",
+            slug = "solo-leveling",
+            title = "Solo Leveling: Arise",
+            description = "In a world where hunters must battle deadly monsters, Sung Jinwoo is an E-rank hunter who discovers a unique quest system.",
+            posterUrl = "https://image.tmdb.org/t/p/w500/geCRueV3ElhRTr0xtJuClJknQd7.jpg",
+            bannerUrl = "https://image.tmdb.org/t/p/original/96yA0B59aJ1o6x3q8g1Cqg9.jpg",
+            rating = 8.5,
+            status = "ongoing",
+            episodesCount = 12,
+            releaseYear = 2024,
+            genres = listOf("Action", "Adventure", "Fantasy")
+        ),
+        SeriesCard(
+            id = "s-jujutsu-kaisen",
+            slug = "jujutsu-kaisen",
+            title = "Jujutsu Kaisen",
+            description = "A boy swallows a cursed talisman - the finger of a demon - and becomes cursed himself.",
+            posterUrl = "https://image.tmdb.org/t/p/w500/hD8pZgMvV6Z2r9lW2Vn2zP2Kq.jpg",
+            bannerUrl = "https://image.tmdb.org/t/p/original/gmP0Kj9ZpTq6gN8yK4w2rP7v.jpg",
+            rating = 8.6,
+            status = "completed",
+            episodesCount = 24,
+            releaseYear = 2020,
+            genres = listOf("Action", "Supernatural")
+        ),
+        SeriesCard(
+            id = "s-attack-on-titan",
+            slug = "attack-on-titan",
+            title = "Attack on Titan",
+            description = "After his hometown is destroyed and his mother is killed, young Eren Jaeger vows to cleanse the earth of the giant humanoid Titans.",
+            posterUrl = "https://image.tmdb.org/t/p/w500/hTP1DtLGFamjfu8WqjnuQdP1n4i.jpg",
+            bannerUrl = "https://image.tmdb.org/t/p/original/2wTfQ7V8e7iQG7iT3u0eR9m.jpg",
+            rating = 9.0,
+            status = "completed",
+            episodesCount = 89,
+            releaseYear = 2013,
+            genres = listOf("Action", "Drama", "Mystery")
+        )
+    )
+    return listOf(
+        ShelfWithItems(
+            shelf = Shelf(id = "shelf-trending-feed", slug = "trending", title = "🔥 Trending Anime & Series", layout = "row"),
+            items = sampleCards
+        )
+    )
 }

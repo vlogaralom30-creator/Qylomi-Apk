@@ -65,22 +65,22 @@ import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 
 fun resolveStreamUrl(rawUrl: String): String {
-    val trimmed = rawUrl.trim()
-    if (trimmed.isEmpty()) return ""
+    val extracted = com.example.util.VideoEmbedUtils.extractUrlFromInput(rawUrl).trim()
+    if (extracted.isEmpty()) return ""
 
     return when {
-        trimmed.startsWith("http://") || trimmed.startsWith("https://") -> {
-            if ((trimmed.contains("cloudflarestream.com") || trimmed.contains("videodelivery.net")) && !trimmed.endsWith(".m3u8")) {
-                val cleanUrl = trimmed.trimEnd('/')
+        extracted.startsWith("http://") || extracted.startsWith("https://") -> {
+            if ((extracted.contains("cloudflarestream.com") || extracted.contains("videodelivery.net")) && !extracted.endsWith(".m3u8")) {
+                val cleanUrl = extracted.trimEnd('/')
                 "$cleanUrl/manifest/video.m3u8"
             } else {
-                trimmed
+                extracted
             }
         }
-        trimmed.matches(Regex("^[a-zA-Z0-9]{32,}$")) -> {
-            "https://customer-cloudflarestream.com/$trimmed/manifest/video.m3u8"
+        extracted.matches(Regex("^[a-zA-Z0-9]{32,}$")) -> {
+            "https://customer-cloudflarestream.com/$extracted/manifest/video.m3u8"
         }
-        else -> trimmed
+        else -> extracted
     }
 }
 
@@ -225,6 +225,8 @@ fun EpisodePlayerView(
             }
             exoPlayer.playWhenReady = true
         } else if (isEmbedVideo) {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
             isBuffering = false
             isFirstFrameRendered = true
             errorMessage = null
@@ -347,14 +349,18 @@ fun EpisodePlayerView(
         }
     }
 
-    val containerModifier = if (isFullscreen) {
+    val baseContainerModifier = if (isFullscreen) {
         Modifier.fillMaxSize()
     } else {
         modifier.fillMaxWidth().aspectRatio(16f / 9f)
     }
 
-    Box(
-        modifier = containerModifier
+    val finalContainerModifier = if (isEmbedVideo) {
+        // Embedded iframe players (Streamtape, Doodstream, etc.) need direct touch events
+        // for play, seek, volume, and fullscreen inside the WebView.
+        baseContainerModifier.background(SeriesTokens.StageBlack)
+    } else {
+        baseContainerModifier
             .background(SeriesTokens.StageBlack)
             .pointerInput(isFullscreen, isControlsLocked) {
                 detectTapGestures(
@@ -420,7 +426,10 @@ fun EpisodePlayerView(
                     )
                 }
             }
-            .testTag("episode_player_container")
+    }
+
+    Box(
+        modifier = finalContainerModifier.testTag("episode_player_container")
     ) {
         // Blurred backdrop until first frame is rendered
         if (!isFirstFrameRendered && !backdropUrl.isNullOrBlank()) {
@@ -444,6 +453,7 @@ fun EpisodePlayerView(
             EmbedVideoPlayer(
                 videoUrl = resolvedUrl,
                 title = episodeTitle ?: seriesTitle,
+                standalone = true,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -492,7 +502,7 @@ fun EpisodePlayerView(
         }
 
         // Double-Tap Seek Ripples (-10s / +10s)
-        if (showDoubleTapSeekLeft) {
+        if (!isEmbedVideo && showDoubleTapSeekLeft) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -508,7 +518,7 @@ fun EpisodePlayerView(
                 }
             }
         }
-        if (showDoubleTapSeekRight) {
+        if (!isEmbedVideo && showDoubleTapSeekRight) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -526,7 +536,7 @@ fun EpisodePlayerView(
         }
 
         // Center Controls: Prev Ep, -10s, Large Golden Play/Pause, +10s, Next Ep
-        if (showControls && !isControlsLocked && errorMessage == null) {
+        if (!isEmbedVideo && showControls && !isControlsLocked && errorMessage == null) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -775,7 +785,7 @@ fun EpisodePlayerView(
 
         // BOTTOM CONTROLS BAR: Skip Intro, Seek Slider with Draggable Thumb & Scrubber Preview, Controls
         AnimatedVisibility(
-            visible = showControls && !isControlsLocked,
+            visible = !isEmbedVideo && showControls && !isControlsLocked,
             enter = fadeIn(animationSpec = tween(180)),
             exit = fadeOut(animationSpec = tween(180)),
             modifier = Modifier.align(Alignment.BottomCenter)
