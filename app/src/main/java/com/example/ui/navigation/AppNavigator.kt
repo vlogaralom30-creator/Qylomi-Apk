@@ -27,7 +27,7 @@ sealed interface AppDestination {
     object CreatorStudio : AppDestination
     object CreatorRewards : AppDestination
     object AdminStudio : AppDestination
-    data class CreatePost(val targetGroupId: String? = null) : AppDestination
+    data class CreatePost(val targetGroupId: String? = null, val initialSharedUrl: String? = null) : AppDestination
     data class TagFeed(val tag: String) : AppDestination
     data class Search(val initialQuery: String = "") : AppDestination
     object Settings : AppDestination
@@ -105,7 +105,7 @@ class AppNavigator(
                 is AppDestination.CreatorStudio -> "creator_studio"
                 is AppDestination.CreatorRewards -> "creator_rewards"
                 is AppDestination.AdminStudio -> "admin_studio"
-                is AppDestination.CreatePost -> "create_post:${dest.targetGroupId ?: ""}"
+                is AppDestination.CreatePost -> "create_post:${dest.targetGroupId ?: ""}:${dest.initialSharedUrl ?: ""}"
                 is AppDestination.TagFeed -> "tag_feed:${dest.tag}"
                 is AppDestination.Search -> "search:${dest.initialQuery}"
                 is AppDestination.Settings -> "settings"
@@ -138,7 +138,8 @@ class AppNavigator(
                 "admin_studio" -> AppDestination.AdminStudio
                 "create_post" -> {
                     val gId = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
-                    AppDestination.CreatePost(gId)
+                    val sharedUrl = parts.getOrNull(2)?.takeIf { it.isNotBlank() }
+                    AppDestination.CreatePost(gId, sharedUrl)
                 }
                 "tag_feed" -> parts.getOrNull(1)?.let { AppDestination.TagFeed(it) }
                 "search" -> AppDestination.Search(parts.drop(1).joinToString(":"))

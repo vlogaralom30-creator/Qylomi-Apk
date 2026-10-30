@@ -1,6 +1,7 @@
 package com.example.video.legacy
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -497,11 +499,46 @@ class FacebookLegacyHandler : VideoPlatformHandler {
         config: PlayerConfig,
         controller: PlayerController?
     ) {
-        EmbedVideoPlayer(
-            videoUrl = video.embedUrl,
-            modifier = modifier,
-            title = video.title ?: "Facebook Video"
-        )
+        val context = androidx.compose.ui.platform.LocalContext.current
+        androidx.compose.foundation.layout.Column(modifier = modifier) {
+            EmbedVideoPlayer(
+                videoUrl = video.embedUrl,
+                modifier = Modifier.fillMaxWidth(),
+                title = video.title ?: "Facebook Video"
+            )
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(6.dp))
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(androidx.compose.ui.graphics.Color(0xFF1877F2))
+                    .clickable {
+                        try {
+                            val targetUrl = video.originalUrl.ifBlank { video.embedUrl }
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(targetUrl))
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    androidx.compose.material3.Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Default.PlayArrow,
+                        contentDescription = "Watch on Facebook",
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(8.dp))
+                    androidx.compose.material3.Text(
+                        text = "Watch on Facebook",
+                        color = androidx.compose.ui.graphics.Color.White,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
     }
 }
 

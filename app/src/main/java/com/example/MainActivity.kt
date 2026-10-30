@@ -97,9 +97,15 @@ import com.example.ui.viewmodel.SocialViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+import android.content.Intent
+
 class MainActivity : ComponentActivity() {
+
+    private val pendingSharedContent = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleSharedIntent(intent)
 
         try {
             enableEdgeToEdge()
@@ -118,7 +124,9 @@ class MainActivity : ComponentActivity() {
                     QSocialApp(
                         app = app,
                         appFactory = appFactory,
-                        viewModel = socialViewModel
+                        viewModel = socialViewModel,
+                        initialSharedIntent = pendingSharedContent.value,
+                        onClearSharedIntent = { pendingSharedContent.value = null }
                     )
 
                     if (showSplash) {
@@ -128,6 +136,22 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleSharedIntent(intent)
+    }
+
+    private fun handleSharedIntent(intent: Intent?) {
+        val parsed = com.example.util.SharedIntentUtils.parseSharedIntent(intent)
+        if (parsed != null) {
+            val content = parsed.url ?: parsed.rawText ?: parsed.mediaUri
+            if (!content.isNullOrBlank()) {
+                pendingSharedContent.value = content
             }
         }
     }
@@ -146,7 +170,9 @@ fun QSocialApp(
     creatorRewardsViewModel: CreatorRewardsViewModel = viewModel(factory = appFactory),
     adminStudioViewModel: AdminStudioViewModel = viewModel(factory = appFactory),
     seriesViewModel: SeriesViewModel = viewModel(factory = appFactory),
-    relayViewModel: RelayViewModel = viewModel(factory = appFactory)
+    relayViewModel: RelayViewModel = viewModel(factory = appFactory),
+    initialSharedIntent: String? = null,
+    onClearSharedIntent: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -204,6 +230,14 @@ fun QSocialApp(
         if (bannerMessage != null) {
             delay(3000)
             viewModel.clearBanner()
+        }
+    }
+
+    // React to incoming shared intent (from TikTok, Facebook, YouTube, etc.)
+    LaunchedEffect(initialSharedIntent) {
+        if (!initialSharedIntent.isNullOrBlank()) {
+            navigator.push(AppDestination.CreatePost(initialSharedUrl = initialSharedIntent))
+            onClearSharedIntent()
         }
     }
 
@@ -753,6 +787,7 @@ fun QSocialApp(
                     val targetGroup = createPostDest.targetGroupId?.let { gid -> groups.find { it.id == gid } }
                     CreatePostBottomSheet(
                         currentUser = currentUser,
+                        initialSharedUrl = createPostDest.initialSharedUrl,
                         onDismiss = { navigator.pop() },
                         onPublishGeneral = { type, title, content, url, onDone ->
                             if (targetGroup != null) {

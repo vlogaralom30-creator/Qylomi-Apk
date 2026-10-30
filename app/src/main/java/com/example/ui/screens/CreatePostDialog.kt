@@ -108,6 +108,7 @@ enum class PostModeTab {
 @Composable
 fun CreatePostBottomSheet(
     currentUser: UserProfile?,
+    initialSharedUrl: String? = null,
     onDismiss: () -> Unit,
     onPublishGeneral: (type: String, title: String?, content: String, url: String?, onDone: (Boolean, String?) -> Unit) -> Unit,
     onPublishVideo: (
@@ -145,6 +146,18 @@ fun CreatePostBottomSheet(
     var videoThumbnailUrl by remember { mutableStateOf("") }
     var videoCategory by remember { mutableStateOf("Technology") }
     var lastExtractedResult by remember { mutableStateOf<ExtractedVideoResult?>(null) }
+
+    // Auto-populate and extract if shared from external app (TikTok, Facebook, YouTube, etc.)
+    androidx.compose.runtime.LaunchedEffect(initialSharedUrl) {
+        if (!initialSharedUrl.isNullOrBlank()) {
+            val extractedUrl = com.example.util.SharedIntentUtils.findFirstUrl(initialSharedUrl) ?: initialSharedUrl
+            if (extractedUrl.isNotBlank()) {
+                videoUrl = extractedUrl
+                currentTab = PostModeTab.VIDEO
+                videoExtractorViewModel.extractVideo(extractedUrl)
+            }
+        }
+    }
 
     // React to extraction results
     androidx.compose.runtime.LaunchedEffect(videoExtractionState) {
