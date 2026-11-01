@@ -341,8 +341,9 @@ fun DirectStreamPlayer(
         }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
+        val renderersFactory = com.example.player.createFaultTolerantRenderersFactory(context)
 
-        ExoPlayer.Builder(context)
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .build().apply {
                 val mediaItem = MediaItem.Builder()
@@ -391,6 +392,29 @@ fun DirectStreamPlayer(
 
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+            }
+
+            var audioSinkRetryCount = 0
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val isAudioSink = com.example.player.isAudioSinkDiscontinuity(error) ||
+                        error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ||
+                        error.errorCode == androidx.media3.common.PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
+
+                if (isAudioSink && audioSinkRetryCount < 3) {
+                    audioSinkRetryCount++
+                    val currentPos = exoPlayer.currentPosition
+                    exoPlayer.playWhenReady = false
+                    val resumePos = if (currentPos > 0) currentPos + 250L else 0L
+                    exoPlayer.seekTo(resumePos)
+                    exoPlayer.prepare()
+                    if (autoPlay) {
+                        exoPlayer.playWhenReady = true
+                    }
+                } else {
+                    isBuffering = false
+                    android.util.Log.e("QVideoPlayer", "Playback error: ${error.message}, code: ${error.errorCode}, cause: ${error.cause}")
+                }
             }
         }
         exoPlayer.addListener(listener)

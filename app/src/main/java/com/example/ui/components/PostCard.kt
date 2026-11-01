@@ -104,12 +104,20 @@ fun PostCard(
     val photoInfo = post.photoDetails
     val textInfo = post.textDetails
 
-    Column(
+    androidx.compose.material3.Card(
         modifier = modifier
             .fillMaxWidth()
-            .background(QSurface)
-            .testTag("post_card_${post.id}")
+            .testTag("post_card_${post.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = QSurface
+        ),
+        elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, QCardBorder.copy(alpha = 0.5f))
     ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
         // 1. Pic - Name - Badge - 3dot (Header), Title, and Read now / text content (with 16dp horizontal padding)
         Column(
             modifier = Modifier
@@ -270,6 +278,27 @@ fun PostCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Debug Rank Overlay
+            if (com.example.BuildConfig.DEBUG && (post.rankScore != null || post.rankPosition != null || post.isAlreadySeen)) {
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF263238))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val scoreStr = post.rankScore?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "n/a"
+                    val posStr = post.rankPosition?.let { "#$it" } ?: ""
+                    Text(
+                        text = "RANK $posStr score=$scoreStr seen=${post.isAlreadySeen}",
+                        color = Color(0xFF80CBC4),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
             // Title
             if (!post.title.isNullOrBlank()) {
                 Text(
@@ -277,7 +306,11 @@ fun PostCard(
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = QOnSurface,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .clickable {
+                            com.example.analytics.UserEventTracker.track(post.id, com.example.data.model.UserEventType.OPEN)
+                        }
                 )
             }
 
@@ -461,8 +494,8 @@ fun PostCard(
                     }
                 }
 
-                // Photo Gallery
-                photoInfo != null || post.type.equals("Photo", ignoreCase = true) -> {
+                // Photo Gallery / Image Post
+                photoInfo != null || post.type.equals("Photo", ignoreCase = true) || (!post.externalUrl.isNullOrBlank() && (post.externalUrl.contains("images.unsplash.com") || post.externalUrl.contains("picsum.photos") || post.externalUrl.endsWith(".jpg", true) || post.externalUrl.endsWith(".jpeg", true) || post.externalUrl.endsWith(".png", true) || post.externalUrl.endsWith(".webp", true))) -> {
                     val urls = photoInfo?.photoUrls?.takeIf { it.isNotEmpty() }
                         ?: listOfNotNull(post.externalUrl?.takeIf { it.isNotBlank() })
                     if (urls.isNotEmpty()) {
@@ -616,6 +649,7 @@ fun PostCard(
                 IconButton(
                     onClick = {
                         try {
+                            com.example.analytics.UserEventTracker.track(post.id, com.example.data.model.UserEventType.SHARE)
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, "${post.content}\nShared via Qylomi")
@@ -634,11 +668,7 @@ fun PostCard(
                 }
             }
         }
-
-        HorizontalDivider(
-            color = QCardBorder.copy(alpha = 0.4f),
-            thickness = 0.8.dp
-        )
+        }
     }
 }
 

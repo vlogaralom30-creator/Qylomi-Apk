@@ -76,6 +76,7 @@ class PostActionsViewModel(application: Application) : AndroidViewModel(applicat
     fun hidePost(post: Post, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             repository.hidePost(post.id)
+            com.example.analytics.UserEventTracker.track(post.id, com.example.data.model.UserEventType.HIDE)
             onDone(true)
         }
     }
@@ -133,6 +134,7 @@ class PostActionsViewModel(application: Application) : AndroidViewModel(applicat
                 putExtra(android.content.Intent.EXTRA_TEXT, text)
             }
             context.startActivity(android.content.Intent.createChooser(shareIntent, "Share Post"))
+            com.example.analytics.UserEventTracker.track(post.id, com.example.data.model.UserEventType.SHARE)
         } catch (_: Exception) {}
     }
 }

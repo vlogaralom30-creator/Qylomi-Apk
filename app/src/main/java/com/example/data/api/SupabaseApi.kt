@@ -73,12 +73,21 @@ interface SupabaseApi {
     // 2. Table: posts & sub-tables (video_posts, photo_posts, text_posts)
     @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)&order=created_at.desc")
     suspend fun getPosts(
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
+    ): Response<List<Post>>
+
+    @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)&order=created_at.desc")
+    suspend fun getPostsByUserIn(
+        @Query("user_id") userInFilter: String,
+        @Query("limit") limit: Int = 40,
+        @Query("offset") offset: Int = 0
     ): Response<List<Post>>
 
     @GET("rest/v1/posts?select=*,profiles:user_id(*)&order=created_at.desc")
     suspend fun getPostsLegacy(
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0
     ): Response<List<Post>>
 
     @GET("rest/v1/posts?select=*,profiles:user_id(*),video_posts(*),photo_posts(*),text_posts(*)&order=created_at.desc")
@@ -377,6 +386,37 @@ interface SupabaseApi {
     suspend fun getPostsByIds(
         @Query("id") idInFilter: String
     ): Response<List<Post>>
+
+    // Feed Algorithm RPC: get_feed
+    @POST("rest/v1/rpc/get_feed")
+    suspend fun getFeedRpc(
+        @Body request: com.example.data.model.GetFeedRpcRequest
+    ): Response<List<com.example.data.model.FeedRankItem>>
+
+    // User Events Tracking
+    @POST("rest/v1/user_events")
+    suspend fun postUserEvents(
+        @Body events: List<com.example.data.model.UserEventRecord>,
+        @Header("Prefer") prefer: String = "return=minimal"
+    ): Response<Unit>
+
+    // Reset Personalization: delete own user events
+    @DELETE("rest/v1/user_events")
+    suspend fun resetUserEvents(
+        @Query("user_id") userIdFilter: String
+    ): Response<Unit>
+
+    @POST("rest/v1/tags")
+    suspend fun insertTag(
+        @Body tag: Map<String, Any?>,
+        @Header("Prefer") prefer: String = "return=representation"
+    ): Response<List<com.example.data.model.Tag>>
+
+    @POST("rest/v1/post_tags")
+    suspend fun insertPostTag(
+        @Body postTag: Map<String, Any?>,
+        @Header("Prefer") prefer: String = "return=minimal"
+    ): Response<Unit>
 
     @GET("rest/v1/post_tags?select=post_id&order=created_at.desc")
     suspend fun getPostIdsByTag(

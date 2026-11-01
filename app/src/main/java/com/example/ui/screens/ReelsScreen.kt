@@ -59,6 +59,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -200,11 +202,16 @@ fun ReelsScreen(
                 pageCount = { reels.size }
             )
 
-            // Listen to settled page
-            LaunchedEffect(pagerState) {
-                snapshotFlow { pagerState.settledPage }.collect { settledPage ->
+            // Listen to settled page and track impression after 1.5s
+            LaunchedEffect(pagerState, reels) {
+                snapshotFlow { pagerState.settledPage }.collectLatest { settledPage ->
                     viewModel.setSettledIndex(settledPage)
                     viewModel.updatePrefetchWindow(settledPage, context)
+                    if (settledPage in reels.indices) {
+                        val currentReel = reels[settledPage]
+                        delay(1500L)
+                        com.example.analytics.UserEventTracker.track(currentReel.id, com.example.data.model.UserEventType.IMPRESSION)
+                    }
                 }
             }
 

@@ -8,6 +8,7 @@ data class SavedAccount(
     val username: String,
     val displayName: String,
     val avatarUrl: String? = null,
+    val savedPass: String? = null,
     val refreshToken: String? = null,
     val accessToken: String? = null,
     val lastActiveTimestamp: Long = System.currentTimeMillis()

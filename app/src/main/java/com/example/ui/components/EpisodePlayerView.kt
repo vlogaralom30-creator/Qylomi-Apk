@@ -123,7 +123,8 @@ fun EpisodePlayerView(
     onPlayNextClick: () -> Unit = {},
     onCancelAutoplayClick: () -> Unit = {},
     onRetrySource: (() -> Unit)? = null,
-    onBackClick: (() -> Unit)? = null
+    onBackClick: (() -> Unit)? = null,
+    onBwsrClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -161,7 +162,8 @@ fun EpisodePlayerView(
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
 
     val exoPlayer = remember(context) {
-        ExoPlayer.Builder(context)
+        val renderersFactory = com.example.player.createFaultTolerantRenderersFactory(context)
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(context))
             .build().apply {
                 playWhenReady = true
@@ -301,29 +303,25 @@ fun EpisodePlayerView(
                 isPlaying = playing
             }
 
-            override fun onPlayerError(error: PlaybackException) {
-                val causeString = (error.cause?.toString() ?: "") + " " + (error.cause?.javaClass?.name ?: "")
-                val msg = error.localizedMessage ?: error.message ?: "Video playback error"
+            var audioSinkRetryCount = 0
 
-                val isAudioSinkError = causeString.contains("UnexpectedDiscontinuityException") ||
-                        causeString.contains("AudioSink") ||
-                        causeString.contains("AudioTrack") ||
-                        msg.contains("UnexpectedDiscontinuityException") ||
-                        msg.contains("AudioSink") ||
-                        msg.contains("AudioTrack") ||
-                        msg.contains("discontinuity") ||
+            override fun onPlayerError(error: PlaybackException) {
+                val isAudioSink = com.example.player.isAudioSinkDiscontinuity(error) ||
                         error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ||
                         error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
 
-                if (isAudioSinkError) {
+                if (isAudioSink && audioSinkRetryCount < 3) {
+                    audioSinkRetryCount++
                     errorMessage = null
                     val currentPos = exoPlayer.currentPosition
                     exoPlayer.playWhenReady = false
-                    exoPlayer.seekTo(if (currentPos > 100) currentPos else 0L)
+                    val resumePos = if (currentPos > 0) currentPos + 250L else 0L
+                    exoPlayer.seekTo(resumePos)
                     exoPlayer.prepare()
                     exoPlayer.playWhenReady = true
                 } else {
                     isBuffering = false
+                    val msg = error.localizedMessage ?: error.message ?: "Video playback error"
                     errorMessage = msg
                     onError(msg)
                 }
@@ -712,6 +710,36 @@ fun EpisodePlayerView(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        if (onBwsrClick != null) {
+                            Surface(
+                                shape = SeriesTokens.shapePill,
+                                color = Color.Black.copy(alpha = 0.6f),
+                                border = BorderStroke(1.dp, QYellowPrimary.copy(alpha = 0.9f)),
+                                modifier = Modifier
+                                    .clip(SeriesTokens.shapePill)
+                                    .clickable { onBwsrClick() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Public,
+                                        contentDescription = "BWSR Mode",
+                                        tint = QYellowPrimary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "BWSR",
+                                        color = QYellowPrimary,
+                                        style = SeriesTypography.micro,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
                         if (!serverBadge.isNullOrBlank()) {
                             Surface(
                                 shape = SeriesTokens.shapePill,
@@ -1021,27 +1049,40 @@ fun EpisodePlayerView(
                             color = QOnSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (onBwsrClick != null) {
+                                Button(
+                                    onClick = onBwsrClick,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = QYellowPrimary,
+                                        contentColor = QOnYellow
+                                    ),
+                                    shape = SeriesTokens.shapePill
+                                ) {
+                                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Play in (BWSR)", fontWeight = FontWeight.Bold)
+                                }
+                            }
                             if (onRetrySource != null) {
                                 OutlinedButton(
                                     onClick = onRetrySource,
                                     shape = SeriesTokens.shapePill
                                 ) {
-                                    Text("Retry Source", color = QOnSurface)
+                                    Text("Retry", color = QOnSurface)
                                 }
                             }
-                            Button(
+                            IconButton(
                                 onClick = {
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolvedUrl))
                                     context.startActivity(intent)
                                 },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = QYellowPrimary,
-                                    contentColor = QOnYellow
-                                ),
-                                shape = SeriesTokens.shapePill
+                                modifier = Modifier.size(36.dp)
                             ) {
-                                Text("Open in Browser", fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.OpenInNew, contentDescription = "Open in Chrome", tint = Color.White)
                             }
                         }
                     }

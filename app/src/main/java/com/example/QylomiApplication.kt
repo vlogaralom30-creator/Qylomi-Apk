@@ -28,6 +28,9 @@ class QylomiApplication : Application() {
 
             // Initialize Ad Shield v2 repository
             com.example.adshield.repository.AdShieldConfigRepository.initialize(this)
+
+            // Initialize Feed UserEventTracker
+            com.example.analytics.UserEventTracker.initialize(this)
         } catch (_: Throwable) {}
     }
 

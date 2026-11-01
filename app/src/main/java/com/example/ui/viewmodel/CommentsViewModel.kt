@@ -53,6 +53,7 @@ class CommentsViewModel(application: Application) : AndroidViewModel(application
         _comments.value = emptyList()
         _replyToComment.value = null
         _editingComment.value = null
+        com.example.analytics.UserEventTracker.track(post.id, com.example.data.model.UserEventType.OPEN)
         loadComments(post.id)
     }
 
@@ -144,6 +145,8 @@ class CommentsViewModel(application: Application) : AndroidViewModel(application
                 val recipientId = parent?.userId ?: post.userId
                 val notifyType = "reply"
                 repository.sendNotificationRpc(recipientId, notifyType, post.id, enriched.id)
+
+                com.example.analytics.UserEventTracker.track(post.id, com.example.data.model.UserEventType.COMMENT)
 
                 onDone(true, null)
             }.onFailure { e ->

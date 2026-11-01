@@ -107,20 +107,7 @@ fun NativeVideoPlayer(
             .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
-        val renderersFactory = object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
-            override fun buildAudioSink(
-                context: android.content.Context,
-                enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean
-            ): androidx.media3.exoplayer.audio.AudioSink? {
-                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .build()
-            }
-        }.apply {
-            setEnableAudioTrackPlaybackParams(true)
-        }
+        val renderersFactory = com.example.player.createFaultTolerantRenderersFactory(context)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(
             VideoPlayerCache.buildCacheDataSourceFactory(context, requestHeaders)
@@ -180,34 +167,29 @@ fun NativeVideoPlayer(
                 isPlaying = playing
             }
 
-            override fun onPlayerError(error: PlaybackException) {
-                val causeString = (error.cause?.toString() ?: "") + " " + (error.cause?.javaClass?.name ?: "")
-                val msg = error.localizedMessage ?: error.message ?: "Video playback error"
+            var audioSinkRetryCount = 0
 
-                val isAudioSinkError = causeString.contains("UnexpectedDiscontinuityException") ||
-                        causeString.contains("AudioSink") ||
-                        causeString.contains("AudioTrack") ||
-                        msg.contains("UnexpectedDiscontinuityException") ||
-                        msg.contains("AudioSink") ||
-                        msg.contains("AudioTrack") ||
-                        msg.contains("discontinuity") ||
+            override fun onPlayerError(error: PlaybackException) {
+                val isAudioSink = com.example.player.isAudioSinkDiscontinuity(error) ||
                         error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED ||
                         error.errorCode == PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
 
-                if (isAudioSinkError) {
-                    // Non-fatal audio track timestamp discontinuity: flush audio sink and resume gracefully
+                if (isAudioSink && audioSinkRetryCount < 3) {
+                    audioSinkRetryCount++
                     errorMessage = null
                     val currentPos = exoPlayer.currentPosition
                     exoPlayer.playWhenReady = false
-                    exoPlayer.seekTo(if (currentPos > 100) currentPos else 0L)
+                    val resumePos = if (currentPos > 0) currentPos + 250L else 0L
+                    exoPlayer.seekTo(resumePos)
                     exoPlayer.prepare()
                     if (autoPlay) {
                         exoPlayer.playWhenReady = true
                     }
                 } else {
                     isBuffering = false
+                    val msg = error.localizedMessage ?: error.message ?: "Video playback error"
                     errorMessage = msg
-                    android.util.Log.e("REELS_TT", "Playback error: $msg, code: ${error.errorCode}, cause: $causeString, url: $playUrl")
+                    android.util.Log.e("REELS_TT", "Playback error: $msg, code: ${error.errorCode}, cause: ${error.cause}, url: $playUrl")
                     onError(msg)
                 }
             }

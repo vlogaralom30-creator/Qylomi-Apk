@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -84,6 +85,7 @@ fun AuthScreen(
     onSelectSavedAccount: (SavedAccount) -> Unit = {},
     onRemoveSavedAccount: (SavedAccount) -> Unit = {}
 ) {
+    val context = LocalContext.current
     var isSignUp by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -327,14 +329,19 @@ fun AuthScreen(
                             onSignUp(email, password, username, displayName) { success, err ->
                                 isLoading = false
                                 if (!success) {
-                                    errorMessage = err ?: "Sign up failed"
+                                    val errorStr = err ?: "Sign up failed"
+                                    errorMessage = errorStr
+                                    com.example.error.AppErrorDispatcher.dispatchAuthError(errorStr)
                                 }
                             }
                         } else {
                             onLogin(email, password) { success, err ->
                                 isLoading = false
                                 if (!success) {
-                                    errorMessage = err ?: "Login failed"
+                                    val errorStr = err ?: "Login failed"
+                                    errorMessage = errorStr
+                                    val isWrongPass = errorStr.contains("password", ignoreCase = true) || errorStr.contains("credentials", ignoreCase = true) || errorStr.contains("invalid", ignoreCase = true)
+                                    com.example.error.AppErrorDispatcher.dispatchAuthError(errorStr, isWrongPassword = isWrongPass)
                                 }
                             }
                         }
@@ -416,7 +423,12 @@ fun AuthScreen(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { onSelectSavedAccount(account) }
+                                .clickable {
+                                    email = account.email
+                                    password = account.savedPass ?: ""
+                                    isSignUp = false
+                                    android.widget.Toast.makeText(context, "Filled ${account.email}. Click 'Log In' button to verify.", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                         ) {
                             Text(
                                 text = account.displayName.ifBlank { account.username },
@@ -430,7 +442,7 @@ fun AuthScreen(
                                 color = QOnSurfaceVariant
                             )
                             Text(
-                                text = "Password: ••••••••",
+                                text = if (!account.savedPass.isNullOrBlank()) "Saved Password: ••••••••" else "Saved Email",
                                 fontSize = 11.sp,
                                 color = QOnSurfaceVariant.copy(alpha = 0.8f)
                             )
@@ -438,16 +450,21 @@ fun AuthScreen(
 
                         Spacer(modifier = Modifier.width(6.dp))
 
-                        // Quick 1-tap Login Button
+                        // Fill Credential Button
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(QYellowLight)
-                                .clickable { onSelectSavedAccount(account) }
+                                .clickable {
+                                    email = account.email
+                                    password = account.savedPass ?: ""
+                                    isSignUp = false
+                                    android.widget.Toast.makeText(context, "Filled ${account.email}. Click 'Log In' button to verify.", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "Log In",
+                                text = "Use",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = QYellowDark

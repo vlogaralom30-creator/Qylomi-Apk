@@ -90,6 +90,11 @@ fun EmbedVideoPlayer(
             delay(15_000)
             if (!isPageLoaded) {
                 isStalled = true
+                com.example.error.AppErrorDispatcher.dispatchUrlError(
+                    url = detectedInfo.embedUrl,
+                    reason = "Video stream or player iframe failed to load within 15 seconds stall timeout",
+                    isIframeCode = detectedInfo.isIframeCode
+                )
             }
         }
     }

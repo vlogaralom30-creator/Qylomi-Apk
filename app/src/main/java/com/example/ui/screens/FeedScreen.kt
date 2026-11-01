@@ -52,12 +52,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.snapshotFlow
+import com.example.analytics.UserEventTracker
+import com.example.data.model.FeedTab
 import com.example.data.model.Post
 import com.example.data.model.SeriesCard
 import com.example.data.model.Shelf
+import com.example.data.model.UserEventType
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import com.example.data.model.ShelfWithItems
 import com.example.data.model.UserProfile
 import com.example.ui.components.CreatorRankChip
@@ -109,9 +118,73 @@ fun FeedScreen(
     watchlistIds: Set<String> = emptySet(),
     onSeriesClick: ((String) -> Unit)? = null,
     onWatchlistToggle: ((SeriesCard) -> Unit)? = null,
-    onSeeAllSeriesClick: (() -> Unit)? = null
+    onSeeAllSeriesClick: (() -> Unit)? = null,
+    selectedFeedTab: FeedTab = FeedTab.FOR_YOU,
+    onFeedTabSelected: (FeedTab) -> Unit = {},
+    onLoadMore: () -> Unit = {},
+    isFeedLoadingMore: Boolean = false,
+    isPersonalizedFeedEnabled: Boolean = true
 ) {
     var storyPreviewProfile by remember { mutableStateOf<UserProfile?>(null) }
+    val listState = rememberLazyListState()
+    val trackerQueueSize by UserEventTracker.queueSize.collectAsState()
+
+    // 50% viewport visibility for >= 1.5s impression tracking
+    LaunchedEffect(listState) {
+        val visibleSince = mutableMapOf<String, Long>()
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val viewportStart = layoutInfo.viewportStartOffset
+            val viewportEnd = layoutInfo.viewportEndOffset
+            val qualified = mutableSetOf<String>()
+
+            layoutInfo.visibleItemsInfo.forEach { item ->
+                val key = item.key.toString()
+                if (key.startsWith("post_")) {
+                    val postId = key.removePrefix("post_")
+                    val itemTop = item.offset
+                    val itemBottom = item.offset + item.size
+                    val visibleTop = maxOf(itemTop, viewportStart)
+                    val visibleBottom = minOf(itemBottom, viewportEnd)
+                    val visibleHeight = maxOf(0, visibleBottom - visibleTop)
+                    if (item.size > 0 && (visibleHeight.toFloat() / item.size.toFloat()) >= 0.5f) {
+                        qualified.add(postId)
+                    }
+                }
+            }
+            qualified
+        }.collectLatest { qualifiedIds ->
+            val now = System.currentTimeMillis()
+            qualifiedIds.forEach { id ->
+                if (!visibleSince.containsKey(id)) {
+                    visibleSince[id] = now
+                }
+            }
+            visibleSince.keys.retainAll(qualifiedIds)
+
+            delay(1500L)
+            val currentNow = System.currentTimeMillis()
+            qualifiedIds.forEach { id ->
+                val start = visibleSince[id]
+                if (start != null && (currentNow - start) >= 1500L) {
+                    UserEventTracker.track(id, UserEventType.IMPRESSION)
+                }
+            }
+        }
+    }
+
+    // Scroll pagination: load more when within 5 items of the end
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val total = listState.layoutInfo.totalItemsCount
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && last >= total - 5
+        }.collect { shouldLoadMore ->
+            if (shouldLoadMore) {
+                onLoadMore()
+            }
+        }
+    }
 
     val categories = listOf("All", "Post", "Idea", "Resource", "Question")
 
@@ -142,6 +215,7 @@ fun FeedScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("feed_list"),
@@ -185,6 +259,91 @@ fun FeedScreen(
                 }
             }
 
+            // Top Feed Tabs Row: [For You, Latest, Trending, Following, Videos, Bangla]
+            item {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(QBackground)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    items(FeedTab.values()) { tab ->
+                        val isSelected = selectedFeedTab == tab
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onFeedTabSelected(tab) },
+                            label = {
+                                Text(
+                                    text = tab.displayName,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = QYellowPrimary,
+                                selectedLabelColor = QOnYellow,
+                                containerColor = QSurface,
+                                labelColor = QOnSurfaceVariant
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) QYellowDark else QCardBorder
+                            ),
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // Debug header when in debug mode
+            if (com.example.BuildConfig.DEBUG) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF263238))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "DEBUG: [${selectedFeedTab.displayName}] Queue: $trackerQueueSize events | Personalized: $isPersonalizedFeedEnabled",
+                            fontSize = 11.sp,
+                            color = Color(0xFF80CBC4),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Secondary filter hint when on For You with non-All category
+            if (selectedFeedTab == FeedTab.FOR_YOU && selectedCategory != "All") {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(QSurfaceVariant)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = QYellowDark, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Ranked feed is optimized for 'All'. Showing chronological for $selectedCategory.",
+                                fontSize = 11.sp,
+                                color = QOnSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             // Categories & Groups Filter Bar
             item {
                 Row(
@@ -192,7 +351,7 @@ fun FeedScreen(
                         .fillMaxWidth()
                         .background(QBackground)
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -329,6 +488,18 @@ fun FeedScreen(
             } else if (filteredPosts.isEmpty()) {
                 // Empty state
                 item {
+                    val isFollowingTab = selectedFeedTab == FeedTab.FOLLOWING
+                    val emptyTitle = if (isFollowingTab) {
+                        if (currentUser == null) "Sign in to see creators you follow" else "Follow creators to see their posts"
+                    } else {
+                        "No posts in $selectedCategory yet"
+                    }
+                    val emptyDesc = if (isFollowingTab) {
+                        "When you follow creators, their new posts, ideas and media will show up right here in your Following feed."
+                    } else {
+                        "Be the first creator to share an update or question with the community!"
+                    }
+
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = QSurface),
@@ -358,28 +529,38 @@ fun FeedScreen(
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "No posts in $selectedCategory yet",
+                                text = emptyTitle,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
-                                color = QOnSurface
+                                color = QOnSurface,
+                                textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Be the first creator to share an update or question with the community!",
+                                text = emptyDesc,
                                 fontSize = 13.sp,
                                 color = QOnSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(18.dp))
                             Button(
-                                onClick = onCreatePostClick,
+                                onClick = {
+                                    if (isFollowingTab) {
+                                        onFeedTabSelected(FeedTab.FOR_YOU)
+                                    } else {
+                                        onCreatePostClick()
+                                    }
+                                },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = QYellowPrimary,
                                     contentColor = QOnYellow
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("Create Post", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (isFollowingTab) "Explore For You Feed" else "Create Post",
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -438,6 +619,23 @@ fun FeedScreen(
                             onSeriesClick = { slug -> onSeriesClick?.invoke(slug) },
                             onWatchlistToggle = { card -> onWatchlistToggle?.invoke(card) },
                             onSeeAllClick = onSeeAllSeriesClick
+                        )
+                    }
+                }
+            }
+
+            if (isFeedLoadingMore) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = QYellowPrimary,
+                            strokeWidth = 2.5.dp
                         )
                     }
                 }

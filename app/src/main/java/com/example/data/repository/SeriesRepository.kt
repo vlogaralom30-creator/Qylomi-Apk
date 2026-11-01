@@ -116,7 +116,21 @@ class SeriesRepository(
         } catch (_: Exception) {
             null
         }
-        return SeriesResult.parseError(raw, response.code())
+        val err = SeriesResult.parseError(raw, response.code())
+        val msg = err.message
+        val endpoint = try { response.raw().request.url.toString() } catch (_: Exception) { null }
+        if (response.code() in 400..499) {
+            if (msg.contains("column", ignoreCase = true) || msg.contains("schema", ignoreCase = true) || msg.contains("does not exist", ignoreCase = true)) {
+                com.example.error.AppErrorDispatcher.dispatchDatabaseError(msg, tableName = endpoint)
+            } else if (msg.contains("permission", ignoreCase = true) || response.code() == 403 || response.code() == 401) {
+                com.example.error.AppErrorDispatcher.dispatchPolicyError("HTTP ${response.code()}", msg)
+            } else {
+                com.example.error.AppErrorDispatcher.dispatchDatabaseError(msg, tableName = endpoint)
+            }
+        } else if (response.code() >= 500) {
+            com.example.error.AppErrorDispatcher.dispatchServerError(response.code(), msg, endpoint)
+        }
+        return err
     }
 
     // =========================================================================

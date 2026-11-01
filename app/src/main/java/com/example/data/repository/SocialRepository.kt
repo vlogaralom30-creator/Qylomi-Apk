@@ -63,17 +63,24 @@ class SocialRepository(
 
     init {
         loadSavedAccounts()
-        val savedUserId = prefs.getString("saved_user_id", null)
-        val savedToken = prefs.getString("saved_token", null)
+        val activeSession = SessionManager.getInstance(context).getActiveSession()
+        val savedUserId = prefs.getString("saved_user_id", null) ?: activeSession?.userId
+        val savedToken = prefs.getString("saved_token", null) ?: activeSession?.accessToken
+
         if (!savedToken.isNullOrBlank()) {
             service.setAuthToken(savedToken)
+            SupabaseClient.setAuthToken(savedToken)
         }
         if (!savedUserId.isNullOrBlank()) {
+            val username = prefs.getString("saved_username", null) ?: activeSession?.email?.substringBefore("@") ?: "user"
+            val displayName = prefs.getString("saved_display_name", null) ?: activeSession?.email?.substringBefore("@") ?: "Q Creator"
+            val avatarUrl = prefs.getString("saved_avatar_url", null)
+
             _currentUser.value = UserProfile(
                 id = savedUserId,
-                username = prefs.getString("saved_username", "user"),
-                displayName = prefs.getString("saved_display_name", "Q Creator"),
-                avatarUrl = prefs.getString("saved_avatar_url", null)
+                username = username,
+                displayName = displayName,
+                avatarUrl = avatarUrl
             )
             _isLoggedIn.value = true
         }
@@ -92,7 +99,8 @@ class SocialRepository(
                             email = obj.optString("email", ""),
                             displayName = obj.optString("displayName", ""),
                             username = obj.optString("username", ""),
-                            avatarUrl = if (obj.has("avatarUrl") && !obj.isNull("avatarUrl")) obj.getString("avatarUrl") else null
+                            avatarUrl = if (obj.has("avatarUrl") && !obj.isNull("avatarUrl")) obj.getString("avatarUrl") else null,
+                            savedPass = if (obj.has("pass") && !obj.isNull("pass")) obj.getString("pass") else null
                         )
                     )
                 }
@@ -115,7 +123,8 @@ class SocialRepository(
                 email = email,
                 displayName = displayName.ifBlank { email.substringBefore("@") },
                 username = username.ifBlank { email.substringBefore("@") },
-                avatarUrl = avatarUrl
+                avatarUrl = avatarUrl,
+                savedPass = pass
             )
         )
         persistSavedAccounts(currentList)
@@ -134,7 +143,7 @@ class SocialRepository(
             list.forEach { item ->
                 val obj = JSONObject()
                 obj.put("email", item.email)
-                obj.put("pass", "")
+                obj.put("pass", item.savedPass ?: "")
                 obj.put("displayName", item.displayName)
                 obj.put("username", item.username)
                 if (item.avatarUrl != null) {
@@ -227,6 +236,8 @@ class SocialRepository(
                     _currentUser.value = profile
                     _isLoggedIn.value = true
                     
+                    saveUserSession(profile, token)
+
                     val session = body.toSession()
                     if (session != null) {
                         SessionManager.getInstance(context).saveSession(session.copy(userId = profile.id, email = email))
@@ -279,6 +290,8 @@ class SocialRepository(
                     _currentUser.value = newProfile
                     _isLoggedIn.value = true
                     
+                    saveUserSession(newProfile, token)
+
                     val session = body.toSession()
                     if (session != null) {
                         SessionManager.getInstance(context).saveSession(session.copy(userId = newProfile.id, email = email))
@@ -317,6 +330,7 @@ class SocialRepository(
         likedPostIds.clear()
         savedPostIds.clear()
         followedUserIds.clear()
+        com.example.analytics.UserEventTracker.clearSessionData()
         prefs.edit()
             .remove("saved_user_id")
             .remove("saved_username")
@@ -418,7 +432,13 @@ class SocialRepository(
         }
     }
 
-    suspend fun createPost(type: String, title: String?, content: String, url: String?): Result<Post> = withContext(Dispatchers.IO) {
+    suspend fun createPost(
+        type: String,
+        title: String?,
+        content: String,
+        url: String?,
+        groupId: String? = null
+    ): Result<Post> = withContext(Dispatchers.IO) {
         val user = _currentUser.value ?: return@withContext Result.failure(Exception("Not logged in"))
         try {
             val request = CreatePostRequest(
@@ -426,11 +446,15 @@ class SocialRepository(
                 type = type,
                 title = title?.takeIf { it.isNotBlank() },
                 content = content,
-                externalUrl = url?.takeIf { it.isNotBlank() }
+                externalUrl = url?.takeIf { it.isNotBlank() },
+                groupId = groupId
             )
             val res = SupabaseClient.api.createPost(request)
             if (res.isSuccessful && !res.body().isNullOrEmpty()) {
-                val created = res.body()!!.first().copy(authorProfile = user)
+                val created = res.body()!!.first().copy(authorProfile = user, groupId = groupId)
+                try {
+                    FeedRepository(context, SupabaseClient, this@SocialRepository).syncPostTags(created.id, emptyList(), title, content)
+                } catch (_: Exception) {}
                 Result.success(created)
             } else {
                 Result.failure(Exception(res.errorBody()?.string() ?: "Failed to publish post"))
@@ -520,6 +544,9 @@ class SocialRepository(
                         )
                     )
                 )
+                try {
+                    FeedRepository(context, SupabaseClient, this@SocialRepository).syncPostTags(createdPost.id, tags, title, videoUrl)
+                } catch (_: Exception) {}
                 Result.success(enriched)
             } else {
                 Result.failure(Exception(res.errorBody()?.string() ?: "Failed to create video post"))
@@ -575,6 +602,9 @@ class SocialRepository(
                         )
                     )
                 )
+                try {
+                    FeedRepository(context, SupabaseClient, this@SocialRepository).syncPostTags(createdPost.id, tags, "Photo Gallery", caption)
+                } catch (_: Exception) {}
                 Result.success(enriched)
             } else {
                 Result.failure(Exception(res.errorBody()?.string() ?: "Failed to create photo post"))
@@ -628,6 +658,9 @@ class SocialRepository(
                         )
                     )
                 )
+                try {
+                    FeedRepository(context, SupabaseClient, this@SocialRepository).syncPostTags(createdPost.id, tags, "Thought", caption)
+                } catch (_: Exception) {}
                 Result.success(enriched)
             } else {
                 Result.failure(Exception(res.errorBody()?.string() ?: "Failed to create text post"))
@@ -787,6 +820,10 @@ class SocialRepository(
     }
 
     fun isUserFollowed(userId: String): Boolean = followedUserIds.contains(userId)
+    fun isPostLiked(postId: String): Boolean = likedPostIds.contains(postId)
+    fun isPostSaved(postId: String): Boolean = savedPostIds.contains(postId)
+    fun isPostHidden(postId: String): Boolean = hiddenPostIds.contains(postId)
+    fun getFollowedUserIds(): Set<String> = followedUserIds.toSet()
 
     // Profiles queries
     suspend fun getAllProfiles(): Result<List<UserProfile>> = withContext(Dispatchers.IO) {

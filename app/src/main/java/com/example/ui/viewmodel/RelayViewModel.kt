@@ -21,7 +21,10 @@ class RelayViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isRelayLoading.value = true
             relayRepository.toggleRelay(postId, quote)
-                .onSuccess {
+                .onSuccess { isRelayed ->
+                    if (isRelayed) {
+                        com.example.analytics.UserEventTracker.track(postId, com.example.data.model.UserEventType.RELAY)
+                    }
                     onDone(true)
                 }
                 .onFailure {

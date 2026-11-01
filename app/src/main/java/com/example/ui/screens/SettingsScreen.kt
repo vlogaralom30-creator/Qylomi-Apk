@@ -34,11 +34,15 @@ fun SettingsScreen(
     currentUser: UserProfile?,
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    isPersonalizedFeed: Boolean = true,
+    onTogglePersonalizedFeed: (Boolean) -> Unit = {},
+    onResetPersonalization: ((Boolean, String?) -> Unit) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val currentTheme = LocalThemeMode.current
     val setTheme = LocalSetThemeMode.current
+    var showResetDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -186,6 +190,95 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Feed & Recommendations Section
+            item {
+                Text(
+                    text = "FEED & RECOMMENDATIONS",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                )
+            }
+
+            item {
+                QCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = null,
+                                tint = QYellowPrimary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Personalized feed",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Use server recommendation ranking based on your activity",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = isPersonalizedFeed,
+                                onCheckedChange = { onTogglePersonalizedFeed(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = QOnYellow,
+                                    checkedTrackColor = QYellowPrimary
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RestartAlt,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Reset personalization",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = "Clear recommendation history and restart with default ranking",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            QButton(
+                                text = "Reset",
+                                onClick = { showResetDialog = true },
+                                variant = QButtonVariant.SECONDARY
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "We use likes, saves, comments and views to rank your feed. Only your own account can see this data.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
                     }
                 }
             }
@@ -344,5 +437,40 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset personalization?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("This will clear your feed recommendation history (likes, bookmarks, comments and impressions used for ranking). This action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetDialog = false
+                        onResetPersonalization { success, errorMsg ->
+                            if (success) {
+                                Toast.makeText(context, "Feed personalization reset. Your feed will now restart with default ranking.", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, errorMsg ?: "Failed to reset personalization", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = QYellowPrimary,
+                        contentColor = QOnYellow
+                    )
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

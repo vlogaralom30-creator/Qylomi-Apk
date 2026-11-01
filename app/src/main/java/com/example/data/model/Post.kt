@@ -30,7 +30,10 @@ data class Post(
     // Client-side interactions tracked from database
     val isLikedByMe: Boolean = false,
     val isBookmarkedByMe: Boolean = false,
-    val isRelayedByMe: Boolean? = false
+    val isRelayedByMe: Boolean? = false,
+    val rankScore: Double? = null,
+    val rankPosition: Int? = null,
+    val isAlreadySeen: Boolean = false
 ) {
     val videoDetails: VideoPost? get() = videoPosts?.firstOrNull()
     val photoDetails: PhotoPost? get() = photoPosts?.firstOrNull()

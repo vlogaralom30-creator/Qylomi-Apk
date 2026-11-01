@@ -1,23 +1,32 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.analytics.UserEventTracker
+import com.example.data.api.SupabaseClient
 import com.example.data.model.Comment
+import com.example.data.model.FeedTab
 import com.example.data.model.NotificationItem
 import com.example.data.model.Post
 import com.example.data.model.ProfileUpdateRequest
+import com.example.data.model.SavedAccount
+import com.example.data.model.UserEventType
 import com.example.data.model.UserProfile
+import com.example.data.repository.FeedRepository
 import com.example.data.repository.SocialRepository
+import com.example.util.FeedPresets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.example.data.model.SavedAccount
 import kotlinx.coroutines.launch
 
 class SocialViewModel(application: Application) : AndroidViewModel(application) {
 
     val repository = SocialRepository(application)
+    val feedRepository = FeedRepository(application, SupabaseClient, repository)
+    private val feedPrefs = application.getSharedPreferences("qylomi_feed_prefs", Context.MODE_PRIVATE)
 
     val currentUser: StateFlow<UserProfile?> = repository.currentUser
     val isLoggedIn: StateFlow<Boolean> = repository.isLoggedIn
@@ -27,7 +36,22 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         repository.removeSavedAccount(account.email)
     }
 
-    private val _feedPosts = MutableStateFlow<List<Post>>(emptyList())
+    private val _selectedFeedTab = MutableStateFlow(FeedTab.FOR_YOU)
+    val selectedFeedTab: StateFlow<FeedTab> = _selectedFeedTab.asStateFlow()
+
+    private val _isPersonalizedFeedEnabled = MutableStateFlow(feedPrefs.getBoolean("pref_personalized_feed", true))
+    val isPersonalizedFeedEnabled: StateFlow<Boolean> = _isPersonalizedFeedEnabled.asStateFlow()
+
+    private val _hasMoreFeed = MutableStateFlow(true)
+    val hasMoreFeed: StateFlow<Boolean> = _hasMoreFeed.asStateFlow()
+
+    private val _isFeedLoadingMore = MutableStateFlow(false)
+    val isFeedLoadingMore: StateFlow<Boolean> = _isFeedLoadingMore.asStateFlow()
+
+    private val shownRankedIds = mutableSetOf<String>()
+    private var currentChronologicalOffset = 0
+
+    private val _feedPosts = MutableStateFlow<List<Post>>(com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts())
     val feedPosts: StateFlow<List<Post>> = _feedPosts.asStateFlow()
 
     private val _savedPosts = MutableStateFlow<List<Post>>(emptyList())
@@ -48,7 +72,7 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
     private val _selectedCategory = MutableStateFlow("All")
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
 
-    private val _allProfiles = MutableStateFlow<List<UserProfile>>(emptyList())
+    private val _allProfiles = MutableStateFlow<List<UserProfile>>(com.example.data.mock.SimulatedFeedDataProvider.creators)
     val allProfiles: StateFlow<List<UserProfile>> = _allProfiles.asStateFlow()
 
     private val _viewedProfile = MutableStateFlow<UserProfile?>(null)
@@ -181,36 +205,304 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    private fun getSeedPostsWithFeatured(): List<Post> {
+        val testPost = createFeaturedStreamtapeTestPost()
+        val simulated = com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()
+        return (listOf(testPost) + simulated).distinctBy { it.id }
+    }
+
+    fun selectFeedTab(tab: FeedTab) {
+        if (_selectedFeedTab.value == tab) return
+        _selectedFeedTab.value = tab
+        loadFeed()
+    }
+
+    fun togglePersonalizedFeed(enabled: Boolean) {
+        _isPersonalizedFeedEnabled.value = enabled
+        UserEventTracker.isPersonalizedFeedEnabled = enabled
+        feedPrefs.edit().putBoolean("pref_personalized_feed", enabled).apply()
+        if (_selectedFeedTab.value == FeedTab.FOR_YOU) {
+            loadFeed()
+        }
+    }
+
+    fun resetPersonalization(onDone: (Boolean, String?) -> Unit) {
+        val user = currentUser.value
+        if (user == null) {
+            onDone(false, "Please sign in to reset feed personalization")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val res = SupabaseClient.api.resetUserEvents("eq.${user.id}")
+                if (res.isSuccessful) {
+                    UserEventTracker.clearSessionData()
+                    loadFeed()
+                    onDone(true, null)
+                } else {
+                    onDone(false, res.errorBody()?.string() ?: "Failed to reset personalization")
+                }
+            } catch (e: Exception) {
+                onDone(false, e.localizedMessage ?: "Failed to reset personalization")
+            }
+        }
+    }
+
     fun loadFeed() {
         viewModelScope.launch {
             _isFeedLoading.value = true
-            val res = repository.getFeedPosts()
-            val testPost = createFeaturedStreamtapeTestPost()
-            res.onSuccess { list ->
-                val combined = listOf(testPost) + list.filter { it.id != testPost.id }
-                _feedPosts.value = combined
-                _feedError.value = null
-            }.onFailure { err ->
-                _feedPosts.value = listOf(testPost)
-                _feedError.value = null
+            shownRankedIds.clear()
+            currentChronologicalOffset = 0
+            _hasMoreFeed.value = true
+
+            val tab = _selectedFeedTab.value
+            val category = _selectedCategory.value
+            val isPersonalized = _isPersonalizedFeedEnabled.value
+
+            when (tab) {
+                FeedTab.FOR_YOU -> {
+                    if (isPersonalized && category == "All") {
+                        val res = feedRepository.getRankedPage(shownRankedIds, pageSize = 20)
+                        res.onSuccess { list ->
+                            shownRankedIds.addAll(list.map { it.id })
+                            val pool = if (list.isNotEmpty()) {
+                                (list + com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()).distinctBy { it.id }
+                            } else {
+                                getSeedPostsWithFeatured()
+                            }
+                            val testPost = createFeaturedStreamtapeTestPost()
+                            val combined = listOf(testPost) + pool.filter { it.id != testPost.id }
+                            _feedPosts.value = combined
+                            _hasMoreFeed.value = list.isNotEmpty()
+                            _feedError.value = null
+                        }.onFailure { err ->
+                            _feedError.value = err.localizedMessage
+                            _feedPosts.value = getSeedPostsWithFeatured()
+                        }
+                    } else {
+                        val res = feedRepository.getChronologicalPage(offset = 0, pageSize = 20)
+                        res.onSuccess { list ->
+                            currentChronologicalOffset = list.size
+                            val pool = if (list.isNotEmpty()) {
+                                (list + com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()).distinctBy { it.id }
+                            } else {
+                                getSeedPostsWithFeatured()
+                            }
+                            val filtered = if (category != "All") pool.filter { it.type.equals(category, ignoreCase = true) } else pool
+                            val testPost = createFeaturedStreamtapeTestPost()
+                            val combined = if (category == "All") listOf(testPost) + filtered.filter { it.id != testPost.id } else filtered
+                            _feedPosts.value = combined
+                            _hasMoreFeed.value = list.size >= 20
+                            _feedError.value = null
+                        }.onFailure { err ->
+                            _feedError.value = err.localizedMessage
+                            val pool = getSeedPostsWithFeatured()
+                            val filtered = if (category != "All") pool.filter { it.type.equals(category, ignoreCase = true) } else pool
+                            _feedPosts.value = filtered
+                        }
+                    }
+                }
+                FeedTab.LATEST -> {
+                    val res = feedRepository.getChronologicalPage(offset = 0, pageSize = 20)
+                    res.onSuccess { list ->
+                        currentChronologicalOffset = list.size
+                        val pool = if (list.isNotEmpty()) {
+                            (list + com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()).distinctBy { it.id }
+                        } else {
+                            getSeedPostsWithFeatured()
+                        }
+                        val filtered = if (category != "All") pool.filter { it.type.equals(category, ignoreCase = true) } else pool
+                        val testPost = createFeaturedStreamtapeTestPost()
+                        val combined = if (category == "All") listOf(testPost) + filtered.filter { it.id != testPost.id } else filtered
+                        _feedPosts.value = combined
+                        _hasMoreFeed.value = list.size >= 20
+                        _feedError.value = null
+                    }.onFailure { err ->
+                        _feedError.value = err.localizedMessage
+                        val pool = getSeedPostsWithFeatured()
+                        val filtered = if (category != "All") pool.filter { it.type.equals(category, ignoreCase = true) } else pool
+                        _feedPosts.value = filtered
+                    }
+                }
+                FeedTab.TRENDING -> {
+                    val res = feedRepository.getPoolPosts(limit = 100, offset = 0)
+                    res.onSuccess { pool ->
+                        val combinedPool = (pool + com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()).distinctBy { it.id }
+                        val sorted = FeedPresets.applyPreset(combinedPool, FeedTab.TRENDING)
+                        val filtered = if (category != "All") sorted.filter { it.type.equals(category, ignoreCase = true) } else sorted
+                        _feedPosts.value = filtered
+                        _hasMoreFeed.value = false
+                        _feedError.value = null
+                    }.onFailure { err ->
+                        _feedError.value = err.localizedMessage
+                        val sorted = FeedPresets.applyPreset(getSeedPostsWithFeatured(), FeedTab.TRENDING)
+                        val filtered = if (category != "All") sorted.filter { it.type.equals(category, ignoreCase = true) } else sorted
+                        _feedPosts.value = filtered
+                    }
+                }
+                FeedTab.FOLLOWING -> {
+                    val user = currentUser.value
+                    if (user == null) {
+                        val simulated = com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()
+                        val filtered = if (category != "All") simulated.filter { it.type.equals(category, ignoreCase = true) } else simulated
+                        _feedPosts.value = filtered
+                        _hasMoreFeed.value = false
+                        _feedError.value = null
+                    } else {
+                        val res = feedRepository.getFollowingPage(user.id, offset = 0, pageSize = 20)
+                        res.onSuccess { list ->
+                            currentChronologicalOffset = list.size
+                            val pool = if (list.isNotEmpty()) list else com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()
+                            val filtered = if (category != "All") pool.filter { it.type.equals(category, ignoreCase = true) } else pool
+                            _feedPosts.value = filtered
+                            _hasMoreFeed.value = list.size >= 20
+                            _feedError.value = null
+                        }.onFailure { err ->
+                            _feedError.value = err.localizedMessage
+                            val simulated = com.example.data.mock.SimulatedFeedDataProvider.getSimulatedPosts()
+                            val filtered = if (category != "All") simulated.filter { it.type.equals(category, ignoreCase = true) } else simulated
+                            _feedPosts.value = filtered
+                        }
+                    }
+                }
+                FeedTab.VIDEOS -> {
+                    val resultList = mutableListOf<Post>()
+                    var poolOffset = 0
+                    var page = 0
+                    while (resultList.size < 10 && page < 3) {
+                        val poolRes = feedRepository.getPoolPosts(limit = 100, offset = poolOffset)
+                        val posts = poolRes.getOrNull() ?: break
+                        if (posts.isEmpty()) break
+                        val filtered = FeedPresets.applyPreset(posts, FeedTab.VIDEOS)
+                        resultList.addAll(filtered)
+                        poolOffset += posts.size
+                        page++
+                        if (posts.size < 100) break
+                    }
+                    val combinedWithSim = (resultList + FeedPresets.applyPreset(getSeedPostsWithFeatured(), FeedTab.VIDEOS)).distinctBy { it.id }
+                    val filtered = if (category != "All") combinedWithSim.filter { it.type.equals(category, ignoreCase = true) } else combinedWithSim
+                    _feedPosts.value = filtered
+                    _hasMoreFeed.value = false
+                    _feedError.value = null
+                }
+                FeedTab.BANGLA -> {
+                    val resultList = mutableListOf<Post>()
+                    var poolOffset = 0
+                    var page = 0
+                    while (resultList.size < 10 && page < 3) {
+                        val poolRes = feedRepository.getPoolPosts(limit = 100, offset = poolOffset)
+                        val posts = poolRes.getOrNull() ?: break
+                        if (posts.isEmpty()) break
+                        val filtered = FeedPresets.applyPreset(posts, FeedTab.BANGLA)
+                        resultList.addAll(filtered)
+                        poolOffset += posts.size
+                        page++
+                        if (posts.size < 100) break
+                    }
+                    val combinedWithSim = (resultList + FeedPresets.applyPreset(getSeedPostsWithFeatured(), FeedTab.BANGLA)).distinctBy { it.id }
+                    val filtered = if (category != "All") combinedWithSim.filter { it.type.equals(category, ignoreCase = true) } else combinedWithSim
+                    _feedPosts.value = filtered
+                    _hasMoreFeed.value = false
+                    _feedError.value = null
+                }
             }
             _isFeedLoading.value = false
+        }
+    }
+
+    fun loadMoreFeed() {
+        if (_isFeedLoadingMore.value || !_hasMoreFeed.value || _isFeedLoading.value) return
+        viewModelScope.launch {
+            _isFeedLoadingMore.value = true
+            val tab = _selectedFeedTab.value
+            val category = _selectedCategory.value
+            val isPersonalized = _isPersonalizedFeedEnabled.value
+
+            when (tab) {
+                FeedTab.FOR_YOU -> {
+                    if (isPersonalized && category == "All") {
+                        val res = feedRepository.getRankedPage(shownRankedIds, pageSize = 20)
+                        res.onSuccess { list ->
+                            if (list.isEmpty()) {
+                                _hasMoreFeed.value = false
+                            } else {
+                                shownRankedIds.addAll(list.map { it.id })
+                                val currentIds = _feedPosts.value.map { it.id }.toSet()
+                                val newItems = list.filter { !currentIds.contains(it.id) }
+                                _feedPosts.value = _feedPosts.value + newItems
+                            }
+                        }.onFailure {
+                            _hasMoreFeed.value = false
+                        }
+                    } else {
+                        val res = feedRepository.getChronologicalPage(offset = currentChronologicalOffset, pageSize = 20)
+                        res.onSuccess { list ->
+                            if (list.isEmpty()) {
+                                _hasMoreFeed.value = false
+                            } else {
+                                currentChronologicalOffset += list.size
+                                val currentIds = _feedPosts.value.map { it.id }.toSet()
+                                val filtered = if (category != "All") list.filter { it.type.equals(category, ignoreCase = true) } else list
+                                val newItems = filtered.filter { !currentIds.contains(it.id) }
+                                _feedPosts.value = _feedPosts.value + newItems
+                                if (list.size < 20) _hasMoreFeed.value = false
+                            }
+                        }.onFailure {
+                            _hasMoreFeed.value = false
+                        }
+                    }
+                }
+                FeedTab.LATEST -> {
+                    val res = feedRepository.getChronologicalPage(offset = currentChronologicalOffset, pageSize = 20)
+                    res.onSuccess { list ->
+                        if (list.isEmpty()) {
+                            _hasMoreFeed.value = false
+                        } else {
+                            currentChronologicalOffset += list.size
+                            val currentIds = _feedPosts.value.map { it.id }.toSet()
+                            val filtered = if (category != "All") list.filter { it.type.equals(category, ignoreCase = true) } else list
+                            val newItems = filtered.filter { !currentIds.contains(it.id) }
+                            _feedPosts.value = _feedPosts.value + newItems
+                            if (list.size < 20) _hasMoreFeed.value = false
+                        }
+                    }.onFailure {
+                        _hasMoreFeed.value = false
+                    }
+                }
+                FeedTab.FOLLOWING -> {
+                    val user = currentUser.value
+                    if (user != null) {
+                        val res = feedRepository.getFollowingPage(user.id, offset = currentChronologicalOffset, pageSize = 20)
+                        res.onSuccess { list ->
+                            if (list.isEmpty()) {
+                                _hasMoreFeed.value = false
+                            } else {
+                                currentChronologicalOffset += list.size
+                                val currentIds = _feedPosts.value.map { it.id }.toSet()
+                                val filtered = if (category != "All") list.filter { it.type.equals(category, ignoreCase = true) } else list
+                                val newItems = filtered.filter { !currentIds.contains(it.id) }
+                                _feedPosts.value = _feedPosts.value + newItems
+                                if (list.size < 20) _hasMoreFeed.value = false
+                            }
+                        }.onFailure {
+                            _hasMoreFeed.value = false
+                        }
+                    } else {
+                        _hasMoreFeed.value = false
+                    }
+                }
+                else -> {
+                    _hasMoreFeed.value = false
+                }
+            }
+            _isFeedLoadingMore.value = false
         }
     }
 
     fun refreshFeed() {
         viewModelScope.launch {
             _isFeedRefreshing.value = true
-            val res = repository.getFeedPosts()
-            val testPost = createFeaturedStreamtapeTestPost()
-            res.onSuccess { list ->
-                val combined = listOf(testPost) + list.filter { it.id != testPost.id }
-                _feedPosts.value = combined
-                _feedError.value = null
-            }.onFailure { err ->
-                _feedPosts.value = listOf(testPost)
-                _feedError.value = null
-            }
+            loadFeed()
             loadSavedPosts()
             _isFeedRefreshing.value = false
         }
@@ -240,13 +532,17 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setCategory(category: String) {
         _selectedCategory.value = category
+        loadFeed()
     }
 
     fun loadProfiles() {
         viewModelScope.launch {
             val res = repository.getAllProfiles()
             res.onSuccess { list ->
-                _allProfiles.value = list
+                val combined = (list + com.example.data.mock.SimulatedFeedDataProvider.creators).distinctBy { it.id }
+                _allProfiles.value = combined
+            }.onFailure {
+                _allProfiles.value = com.example.data.mock.SimulatedFeedDataProvider.creators
             }
         }
     }
@@ -360,7 +656,10 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         viewModelScope.launch {
-            repository.toggleLike(post.id)
+            val isNowLiked = repository.toggleLike(post.id)
+            if (isNowLiked) {
+                UserEventTracker.track(post.id, UserEventType.LIKE)
+            }
         }
     }
 
@@ -378,6 +677,9 @@ class SocialViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             val isNowSaved = repository.toggleBookmark(post.id)
+            if (isNowSaved) {
+                UserEventTracker.track(post.id, UserEventType.BOOKMARK)
+            }
             setBanner(if (isNowSaved) "Saved to Bookmarks" else "Removed from Bookmarks")
             loadSavedPosts()
         }

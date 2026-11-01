@@ -58,6 +58,7 @@ fun SeriesPlayerScreen(
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var isBwsrMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let { msg ->
@@ -105,14 +106,29 @@ fun SeriesPlayerScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // 1. Media3 ExoPlayer View (Pinned 16:9 full width)
+            // 1. Episode Stage (Normal Media3 ExoPlayer or In-App Web Browser BWSR Mode)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .background(SeriesTokens.StageBlack)
             ) {
-                if (activeSource != null && currentEp != null) {
+                if (isBwsrMode && activeSource != null && currentEp != null) {
+                    BwsrEpisodeBrowserView(
+                        rawUrl = activeSource.url,
+                        episodes = uiState.episodes,
+                        currentEpisodeId = currentEp.id,
+                        seriesTitle = currentSeries?.title,
+                        episodeNumber = currentEp.episodeNumber,
+                        modifier = Modifier.fillMaxSize(),
+                        onSelectEpisode = { ep ->
+                            viewModel.selectEpisode(ep)
+                        },
+                        onExitBwsr = {
+                            isBwsrMode = false
+                        }
+                    )
+                } else if (activeSource != null && currentEp != null) {
                     EpisodePlayerView(
                         rawVideoUrl = activeSource.url,
                         initialPositionSec = uiState.initialSeekPositionSec,
@@ -153,7 +169,10 @@ fun SeriesPlayerScreen(
                         onRetrySource = {
                             viewModel.selectSourceManually(activeSource)
                         },
-                        onBackClick = onBackClick
+                        onBackClick = onBackClick,
+                        onBwsrClick = {
+                            isBwsrMode = true
+                        }
                     )
                 } else if (uiState.playerError != null) {
                     Box(
@@ -176,6 +195,21 @@ fun SeriesPlayerScreen(
                                 color = Color.White,
                                 style = SeriesTypography.body
                             )
+                            if (activeSource != null) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = { isBwsrMode = true },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = QYellowPrimary,
+                                        contentColor = QOnYellow
+                                    ),
+                                    shape = SeriesTokens.shapePill
+                                ) {
+                                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Play in (BWSR) Mode", fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 } else {
@@ -252,6 +286,35 @@ fun SeriesPlayerScreen(
                             }
                             if (!activeSource?.quality.isNullOrBlank()) {
                                 MetaChip(text = activeSource.quality)
+                            }
+
+                            // BWSR Mode Toggle Button
+                            Surface(
+                                shape = SeriesTokens.shapePill,
+                                color = if (isBwsrMode) QYellowPrimary else Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, if (isBwsrMode) QYellowPrimary else Color.White.copy(alpha = 0.3f)),
+                                modifier = Modifier
+                                    .clip(SeriesTokens.shapePill)
+                                    .clickable { isBwsrMode = !isBwsrMode }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Public,
+                                        contentDescription = "BWSR Mode",
+                                        tint = if (isBwsrMode) QOnYellow else Color.White,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "BWSR",
+                                        color = if (isBwsrMode) QOnYellow else Color.White,
+                                        style = SeriesTypography.micro,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
 

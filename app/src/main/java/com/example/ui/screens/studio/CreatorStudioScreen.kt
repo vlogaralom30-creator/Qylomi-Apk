@@ -70,6 +70,13 @@ fun CreatorStudioScreen(
     var showBulkAddDialog by rememberSaveable { mutableStateOf(false) }
     var showAddSeasonDialog by rememberSaveable { mutableStateOf(false) }
     var seriesToDelete by remember { mutableStateOf<Series?>(null) }
+    var showErrorInspector by remember { mutableStateOf(false) }
+
+    if (showErrorInspector) {
+        com.example.error.ui.AppErrorInspectorBottomSheet(
+            onDismiss = { showErrorInspector = false }
+        )
+    }
 
     LaunchedEffect(bannerMessage) {
         bannerMessage?.let {
@@ -137,6 +144,15 @@ fun CreatorStudioScreen(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showErrorInspector = true }) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.BugReport,
+                            contentDescription = "Error Inspector",
+                            tint = QYellowPrimary
                         )
                     }
                 },

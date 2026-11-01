@@ -184,6 +184,9 @@ fun QSocialApp(
     val feedError by viewModel.feedError.collectAsState()
     val isProfileRefreshing by viewModel.isProfileRefreshing.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val selectedFeedTab by viewModel.selectedFeedTab.collectAsState()
+    val isFeedLoadingMore by viewModel.isFeedLoadingMore.collectAsState()
+    val isPersonalizedFeedEnabled by viewModel.isPersonalizedFeedEnabled.collectAsState()
     val allProfiles by viewModel.allProfiles.collectAsState()
     val viewedUserPosts by viewModel.viewedUserPosts.collectAsState()
     val notifications by viewModel.notifications.collectAsState()
@@ -285,18 +288,7 @@ fun QSocialApp(
                 viewModel.signUp(email, pass, username, displayName, onDone)
             },
             savedAccounts = savedAccounts,
-            onSelectSavedAccount = { account ->
-                val matchingProfile = allProfiles.find {
-                    it.username.equals(account.username, ignoreCase = true) ||
-                    it.displayName.equals(account.displayName, ignoreCase = true)
-                } ?: UserProfile(
-                    id = "user_${account.username}",
-                    username = account.username,
-                    displayName = account.displayName,
-                    avatarUrl = account.avatarUrl
-                )
-                viewModel.loginAsDemoUser(matchingProfile)
-            },
+            onSelectSavedAccount = { _ -> },
             onRemoveSavedAccount = { account -> viewModel.removeSavedAccount(account) },
             onContinueAsGuest = {
                 val guestProfile = UserProfile(
@@ -471,7 +463,12 @@ fun QSocialApp(
                                                 watchlistIds = seriesWatchlistIds,
                                                 onSeriesClick = { slug -> navigator.push(AppDestination.SeriesDetails(slug)) },
                                                 onWatchlistToggle = { card -> seriesViewModel.toggleWatchlist(card.id, onAuthRequired = {}) },
-                                                onSeeAllSeriesClick = { navigator.push(AppDestination.SeriesHome) }
+                                                onSeeAllSeriesClick = { navigator.push(AppDestination.SeriesHome) },
+                                                selectedFeedTab = selectedFeedTab,
+                                                onFeedTabSelected = { tab -> viewModel.selectFeedTab(tab) },
+                                                onLoadMore = { viewModel.loadMoreFeed() },
+                                                isFeedLoadingMore = isFeedLoadingMore,
+                                                isPersonalizedFeedEnabled = isPersonalizedFeedEnabled
                                             )
                                         }
 
@@ -759,7 +756,10 @@ fun QSocialApp(
                                             SettingsScreen(
                                                 currentUser = currentUser,
                                                 onBack = { navigator.pop() },
-                                                onLogout = { viewModel.logout() }
+                                                onLogout = { viewModel.logout() },
+                                                isPersonalizedFeed = isPersonalizedFeedEnabled,
+                                                onTogglePersonalizedFeed = { enabled -> viewModel.togglePersonalizedFeed(enabled) },
+                                                onResetPersonalization = { onDone -> viewModel.resetPersonalization(onDone) }
                                             )
                                         }
                                     }
@@ -791,6 +791,9 @@ fun QSocialApp(
                             )
                         }
                     }
+
+                    // Global Error Diagnostic Overlay (Role-Aware: Creator/Admin Popups vs Normal User Simple Bar)
+                    com.example.error.ui.AppErrorDiagnosticOverlay(currentUser = currentUser)
                 }
 
                 // Modal: Create Post Bottom Sheet
