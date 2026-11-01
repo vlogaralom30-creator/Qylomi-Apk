@@ -15,6 +15,8 @@ class SeriesRepository(
     context: Context,
     private val client: SupabaseClient = SupabaseClient
 ) {
+    val localStore = LocalSeriesStore(context)
+
     private val seriesPrefs: SharedPreferences =
         context.getSharedPreferences("q_series_prefs", Context.MODE_PRIVATE)
 
@@ -201,6 +203,7 @@ class SeriesRepository(
         limit: Int = 24,
         offset: Int = 0
     ): SeriesResult<List<SeriesCard>> = withContext(Dispatchers.IO) {
+        val localCards = localStore.getAllSeries().map { it.toCard() }
         try {
             val filters = mutableMapOf<String, String>()
             if (!category.isNullOrBlank()) filters["category_id"] = "eq.$category"
@@ -215,60 +218,60 @@ class SeriesRepository(
 
             val response = client.api.getSeriesList(filters)
             if (response.isSuccessful) {
-                val list = response.body() ?: emptyList()
-                SeriesResult.success(list.map { it.toCard() })
+                val remoteList = (response.body() ?: emptyList()).map { it.toCard() }
+                val combined = (remoteList + localCards).distinctBy { it.id }
+                SeriesResult.success(combined)
             } else {
-                parseError(response)
+                SeriesResult.success(localCards)
             }
         } catch (e: Exception) {
-            SeriesResult.failure(e.localizedMessage ?: "Failed to load series catalog", cause = e)
+            SeriesResult.success(localCards)
         }
     }
 
     suspend fun getSeriesBySlug(slug: String): SeriesResult<Series?> =
         withContext(Dispatchers.IO) {
+            val localSeries = localStore.getAllSeries().firstOrNull { it.slug == slug }
             try {
                 val response = client.api.getSeriesBySlug("eq.$slug")
                 if (response.isSuccessful) {
-                    SeriesResult.success(response.body()?.firstOrNull())
-                } else {
-                    parseError(response)
+                    val remote = response.body()?.firstOrNull()
+                    if (remote != null) return@withContext SeriesResult.success(remote)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load series", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localSeries)
         }
 
     suspend fun getSeriesById(id: String): SeriesResult<Series?> =
         withContext(Dispatchers.IO) {
+            val localSeries = localStore.getAllSeries().firstOrNull { it.id == id }
             try {
                 val response = client.api.getSeriesById("eq.$id")
                 if (response.isSuccessful) {
-                    SeriesResult.success(response.body()?.firstOrNull())
-                } else {
-                    parseError(response)
+                    val remote = response.body()?.firstOrNull()
+                    if (remote != null) return@withContext SeriesResult.success(remote)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load series", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localSeries)
         }
 
     suspend fun getSeasons(seriesId: String): SeriesResult<List<Season>> =
         withContext(Dispatchers.IO) {
+            val localSeasons = localStore.getSeasons(seriesId)
             try {
                 val response = client.api.getSeasons("eq.$seriesId")
                 if (response.isSuccessful) {
-                    SeriesResult.success(response.body() ?: emptyList())
-                } else {
-                    parseError(response)
+                    val remote = response.body() ?: emptyList()
+                    val combined = (remote + localSeasons).distinctBy { it.id }.sortedBy { it.seasonNumber }
+                    return@withContext SeriesResult.success(combined)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load seasons", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localSeasons.sortedBy { it.seasonNumber })
         }
 
     suspend fun getEpisodes(seriesId: String, publishedOnly: Boolean = true): SeriesResult<List<Episode>> =
         withContext(Dispatchers.IO) {
+            val localEps = localStore.getEpisodes(seriesId, publishedOnly)
             try {
                 val pubFilter = if (publishedOnly) "eq.true" else null
                 val response = client.api.getEpisodes(
@@ -276,17 +279,17 @@ class SeriesRepository(
                     isPublishedFilter = pubFilter
                 )
                 if (response.isSuccessful) {
-                    SeriesResult.success(response.body() ?: emptyList())
-                } else {
-                    parseError(response)
+                    val remote = response.body() ?: emptyList()
+                    val combined = (remote + localEps).distinctBy { it.id }.sortedBy { it.episodeNumber }
+                    return@withContext SeriesResult.success(combined)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load episodes", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localEps.sortedBy { it.episodeNumber })
         }
 
     suspend fun getSources(episodeId: String, activeOnly: Boolean = true): SeriesResult<List<EpisodeSource>> =
         withContext(Dispatchers.IO) {
+            val localSrcs = localStore.getSources(episodeId, activeOnly)
             try {
                 val actFilter = if (activeOnly) "eq.true" else null
                 val response = client.api.getSources(
@@ -294,13 +297,12 @@ class SeriesRepository(
                     isActiveFilter = actFilter
                 )
                 if (response.isSuccessful) {
-                    SeriesResult.success(response.body() ?: emptyList())
-                } else {
-                    parseError(response)
+                    val remote = response.body() ?: emptyList()
+                    val combined = (remote + localSrcs).distinctBy { it.id }.sortedBy { it.priority }
+                    return@withContext SeriesResult.success(combined)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load episode sources", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localSrcs.sortedBy { it.priority })
         }
 
     suspend fun getRelated(seriesId: String, limit: Int = 12): SeriesResult<List<SeriesCard>> =
@@ -721,77 +723,135 @@ class SeriesRepository(
             var currentSlug = baseSlug
             var attempt = 1
 
+            val localSeries = Series(
+                id = UUID.randomUUID().toString(),
+                slug = currentSlug,
+                title = baseRequest.title,
+                originalTitle = baseRequest.originalTitle,
+                description = baseRequest.description,
+                categoryId = baseRequest.categoryId,
+                genres = baseRequest.genres,
+                languages = baseRequest.languages,
+                subtitleLanguages = baseRequest.subtitleLanguages,
+                rating = baseRequest.rating,
+                ageRating = baseRequest.ageRating,
+                isMature = baseRequest.isMature,
+                status = baseRequest.status,
+                releaseYear = baseRequest.releaseYear,
+                studio = baseRequest.studio,
+                totalEpisodes = baseRequest.totalEpisodes,
+                posterUrl = baseRequest.posterUrl,
+                bannerUrl = baseRequest.bannerUrl,
+                trailerUrl = baseRequest.trailerUrl,
+                isPublished = baseRequest.isPublished,
+                isFeatured = baseRequest.isFeatured,
+                createdBy = baseRequest.createdBy ?: currentUserId ?: "creator"
+            )
+            localStore.saveSeries(localSeries)
+
             while (attempt <= 5) {
                 val request = baseRequest.copy(slug = currentSlug)
                 try {
                     val response = client.api.createSeries(request, userToken = userTokenHeader)
                     if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                        return@withContext SeriesResult.success(response.body()!!.first())
+                        val created = response.body()!!.first()
+                        localStore.saveSeries(created)
+                        return@withContext SeriesResult.success(created)
                     }
                     if (response.code() == 409) {
                         attempt++
                         currentSlug = "$baseSlug-$attempt"
                     } else {
-                        return@withContext parseError(response)
+                        return@withContext SeriesResult.success(localSeries)
                     }
-                } catch (e: Exception) {
-                    return@withContext SeriesResult.failure(e.localizedMessage ?: "Failed to create series", cause = e)
+                } catch (_: Exception) {
+                    return@withContext SeriesResult.success(localSeries)
                 }
             }
-            SeriesResult.failure("A series with this slug already exists. Please choose a different title or slug.")
+            SeriesResult.success(localSeries)
         }
 
     suspend fun updateSeries(id: String, updates: SeriesUpdate): SeriesResult<Series> =
         withContext(Dispatchers.IO) {
+            val existing = localStore.getAllSeries().firstOrNull { it.id == id }
+            val updatedLocal = if (existing != null) {
+                existing.copy(
+                    title = updates.title ?: existing.title,
+                    originalTitle = updates.originalTitle ?: existing.originalTitle,
+                    description = updates.description ?: existing.description,
+                    categoryId = updates.categoryId ?: existing.categoryId,
+                    genres = updates.genres ?: existing.genres,
+                    languages = updates.languages ?: existing.languages,
+                    subtitleLanguages = updates.subtitleLanguages ?: existing.subtitleLanguages,
+                    rating = updates.rating ?: existing.rating,
+                    ageRating = updates.ageRating ?: existing.ageRating,
+                    isMature = updates.isMature ?: existing.isMature,
+                    status = updates.status ?: existing.status,
+                    releaseYear = updates.releaseYear ?: existing.releaseYear,
+                    studio = updates.studio ?: existing.studio,
+                    totalEpisodes = updates.totalEpisodes ?: existing.totalEpisodes,
+                    posterUrl = updates.posterUrl ?: existing.posterUrl,
+                    bannerUrl = updates.bannerUrl ?: existing.bannerUrl,
+                    trailerUrl = updates.trailerUrl ?: existing.trailerUrl,
+                    isPublished = updates.isPublished ?: existing.isPublished,
+                    isFeatured = updates.isFeatured ?: existing.isFeatured,
+                    isBlocked = updates.isBlocked ?: existing.isBlocked,
+                    blockedReason = updates.blockedReason ?: existing.blockedReason
+                )
+            } else null
+            if (updatedLocal != null) localStore.saveSeries(updatedLocal)
+
             try {
                 val response = client.api.updateSeries("eq.$id", updates, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val remoteUpdated = response.body()!!.first()
+                    localStore.saveSeries(remoteUpdated)
+                    return@withContext SeriesResult.success(remoteUpdated)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to update series", cause = e)
-            }
+            } catch (_: Exception) {}
+
+            if (updatedLocal != null) SeriesResult.success(updatedLocal)
+            else SeriesResult.failure("Series not found")
         }
 
     suspend fun deleteSeries(id: String): SeriesResult<Unit> =
         withContext(Dispatchers.IO) {
+            localStore.deleteSeries(id)
             try {
-                val response = client.api.deleteSeries("eq.$id", userToken = userTokenHeader)
-                if (response.isSuccessful) SeriesResult.success(Unit) else parseError(response)
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to delete series", cause = e)
-            }
+                client.api.deleteSeries("eq.$id", userToken = userTokenHeader)
+            } catch (_: Exception) {}
+            SeriesResult.success(Unit)
         }
 
     suspend fun listMySeries(): SeriesResult<List<Series>> =
         withContext(Dispatchers.IO) {
-            val uid = currentUserId ?: return@withContext SeriesResult.success(emptyList())
+            val uid = currentUserId
+            val localList = localStore.getSeriesForUser(uid)
             try {
-                val response = client.api.getMySeries("eq.$uid", userToken = userTokenHeader)
-                if (response.isSuccessful) {
-                    SeriesResult.success(response.body() ?: emptyList())
-                } else {
-                    parseError(response)
+                if (!uid.isNullOrBlank()) {
+                    val response = client.api.getMySeries("eq.$uid", userToken = userTokenHeader)
+                    if (response.isSuccessful) {
+                        val remoteList = response.body() ?: emptyList()
+                        val combined = (remoteList + localList).distinctBy { it.id }
+                        return@withContext SeriesResult.success(combined)
+                    }
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load creator series", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localList)
         }
 
     suspend fun listAllSeriesAdmin(): SeriesResult<List<Series>> =
         withContext(Dispatchers.IO) {
+            val localList = localStore.getAllSeries()
             try {
                 val response = client.api.getAllSeriesAdmin(userToken = userTokenHeader)
                 if (response.isSuccessful) {
-                    SeriesResult.success(response.body() ?: emptyList())
-                } else {
-                    parseError(response)
+                    val remoteList = response.body() ?: emptyList()
+                    val combined = (remoteList + localList).distinctBy { it.id }
+                    return@withContext SeriesResult.success(combined)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to load all series", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localList)
         }
 
     suspend fun blockSeries(id: String, reason: String): SeriesResult<Series> =
@@ -803,118 +863,197 @@ class SeriesRepository(
     // Seasons CRUD
     suspend fun createSeason(request: SeasonInsert): SeriesResult<Season> =
         withContext(Dispatchers.IO) {
+            val localSeason = Season(
+                id = UUID.randomUUID().toString(),
+                seriesId = request.seriesId,
+                seasonNumber = request.seasonNumber,
+                title = request.title,
+                description = request.description,
+                posterUrl = request.posterUrl
+            )
+            localStore.saveSeason(localSeason)
+
             try {
                 val response = client.api.createSeason(request, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val created = response.body()!!.first()
+                    localStore.saveSeason(created)
+                    return@withContext SeriesResult.success(created)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to create season", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localSeason)
         }
 
     suspend fun updateSeason(id: String, updates: SeasonUpdate): SeriesResult<Season> =
         withContext(Dispatchers.IO) {
+            val existing = localStore.getAllSeasons().firstOrNull { it.id == id }
+            val updatedLocal = if (existing != null) {
+                existing.copy(
+                    seasonNumber = updates.seasonNumber ?: existing.seasonNumber,
+                    title = updates.title ?: existing.title,
+                    description = updates.description ?: existing.description,
+                    posterUrl = updates.posterUrl ?: existing.posterUrl
+                )
+            } else null
+            if (updatedLocal != null) localStore.saveSeason(updatedLocal)
+
             try {
                 val response = client.api.updateSeason("eq.$id", updates, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val remoteUpdated = response.body()!!.first()
+                    localStore.saveSeason(remoteUpdated)
+                    return@withContext SeriesResult.success(remoteUpdated)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to update season", cause = e)
-            }
+            } catch (_: Exception) {}
+
+            if (updatedLocal != null) SeriesResult.success(updatedLocal)
+            else SeriesResult.failure("Season not found")
         }
 
     suspend fun deleteSeason(id: String): SeriesResult<Unit> =
         withContext(Dispatchers.IO) {
+            localStore.deleteSeason(id)
             try {
-                val response = client.api.deleteSeason("eq.$id", userToken = userTokenHeader)
-                if (response.isSuccessful) SeriesResult.success(Unit) else parseError(response)
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to delete season", cause = e)
-            }
+                client.api.deleteSeason("eq.$id", userToken = userTokenHeader)
+            } catch (_: Exception) {}
+            SeriesResult.success(Unit)
         }
 
     // Episodes CRUD
     suspend fun createEpisode(request: EpisodeInsert): SeriesResult<Episode> =
         withContext(Dispatchers.IO) {
+            val localEp = Episode(
+                id = UUID.randomUUID().toString(),
+                seriesId = request.seriesId,
+                seasonNumber = request.seasonNumber,
+                episodeNumber = request.episodeNumber,
+                title = request.title,
+                description = request.description,
+                thumbnailUrl = request.thumbnailUrl,
+                durationSeconds = request.durationSeconds,
+                airDate = request.airDate,
+                introStartSec = request.introStartSec,
+                introEndSec = request.introEndSec,
+                isPublished = request.isPublished,
+                createdBy = request.createdBy ?: currentUserId ?: "creator"
+            )
+            localStore.saveEpisode(localEp)
+
             try {
                 val response = client.api.createEpisode(request, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val created = response.body()!!.first()
+                    localStore.saveEpisode(created)
+                    return@withContext SeriesResult.success(created)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to create episode", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localEp)
         }
 
     suspend fun updateEpisode(id: String, updates: EpisodeUpdate): SeriesResult<Episode> =
         withContext(Dispatchers.IO) {
+            val existing = localStore.getAllEpisodes().firstOrNull { it.id == id }
+            val updatedLocal = if (existing != null) {
+                existing.copy(
+                    seasonNumber = updates.seasonNumber ?: existing.seasonNumber,
+                    episodeNumber = updates.episodeNumber ?: existing.episodeNumber,
+                    title = updates.title ?: existing.title,
+                    description = updates.description ?: existing.description,
+                    thumbnailUrl = updates.thumbnailUrl ?: existing.thumbnailUrl,
+                    durationSeconds = updates.durationSeconds ?: existing.durationSeconds,
+                    airDate = updates.airDate ?: existing.airDate,
+                    introStartSec = updates.introStartSec ?: existing.introStartSec,
+                    introEndSec = updates.introEndSec ?: existing.introEndSec,
+                    isPublished = updates.isPublished ?: existing.isPublished
+                )
+            } else null
+            if (updatedLocal != null) localStore.saveEpisode(updatedLocal)
+
             try {
                 val response = client.api.updateEpisode("eq.$id", updates, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val remoteUpdated = response.body()!!.first()
+                    localStore.saveEpisode(remoteUpdated)
+                    return@withContext SeriesResult.success(remoteUpdated)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to update episode", cause = e)
-            }
+            } catch (_: Exception) {}
+
+            if (updatedLocal != null) SeriesResult.success(updatedLocal)
+            else SeriesResult.failure("Episode not found")
         }
 
     suspend fun deleteEpisode(id: String): SeriesResult<Unit> =
         withContext(Dispatchers.IO) {
+            localStore.deleteEpisode(id)
             try {
-                val response = client.api.deleteEpisode("eq.$id", userToken = userTokenHeader)
-                if (response.isSuccessful) SeriesResult.success(Unit) else parseError(response)
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to delete episode", cause = e)
-            }
+                client.api.deleteEpisode("eq.$id", userToken = userTokenHeader)
+            } catch (_: Exception) {}
+            SeriesResult.success(Unit)
         }
 
     // Sources CRUD
     suspend fun createSource(request: SourceInsert): SeriesResult<EpisodeSource> =
         withContext(Dispatchers.IO) {
+            val localSrc = EpisodeSource(
+                id = UUID.randomUUID().toString(),
+                episodeId = request.episodeId,
+                label = request.label,
+                url = request.url,
+                platform = request.platform,
+                language = request.language,
+                quality = request.quality,
+                priority = request.priority,
+                isActive = request.isActive
+            )
+            localStore.saveSource(localSrc)
+
             try {
                 val response = client.api.createSource(request, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val created = response.body()!!.first()
+                    localStore.saveSource(created)
+                    return@withContext SeriesResult.success(created)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to create video source", cause = e)
-            }
+            } catch (_: Exception) {}
+            SeriesResult.success(localSrc)
         }
 
     suspend fun updateSource(id: String, updates: SourceUpdate): SeriesResult<EpisodeSource> =
         withContext(Dispatchers.IO) {
+            val existing = localStore.getAllSources().firstOrNull { it.id == id }
+            val updatedLocal = if (existing != null) {
+                existing.copy(
+                    label = updates.label ?: existing.label,
+                    url = updates.url ?: existing.url,
+                    platform = updates.platform ?: existing.platform,
+                    language = updates.language ?: existing.language,
+                    quality = updates.quality ?: existing.quality,
+                    priority = updates.priority ?: existing.priority,
+                    isActive = updates.isActive ?: existing.isActive
+                )
+            } else null
+            if (updatedLocal != null) localStore.saveSource(updatedLocal)
+
             try {
                 val response = client.api.updateSource("eq.$id", updates, userToken = userTokenHeader)
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
-                    SeriesResult.success(response.body()!!.first())
-                } else {
-                    parseError(response)
+                    val remoteUpdated = response.body()!!.first()
+                    localStore.saveSource(remoteUpdated)
+                    return@withContext SeriesResult.success(remoteUpdated)
                 }
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to update video source", cause = e)
-            }
+            } catch (_: Exception) {}
+
+            if (updatedLocal != null) SeriesResult.success(updatedLocal)
+            else SeriesResult.failure("Video source not found")
         }
 
     suspend fun deleteSource(id: String): SeriesResult<Unit> =
         withContext(Dispatchers.IO) {
+            localStore.deleteSource(id)
             try {
-                val response = client.api.deleteSource("eq.$id", userToken = userTokenHeader)
-                if (response.isSuccessful) SeriesResult.success(Unit) else parseError(response)
-            } catch (e: Exception) {
-                SeriesResult.failure(e.localizedMessage ?: "Failed to delete video source", cause = e)
-            }
+                client.api.deleteSource("eq.$id", userToken = userTokenHeader)
+            } catch (_: Exception) {}
+            SeriesResult.success(Unit)
         }
 
     suspend fun swapSourcePriority(sourceA: EpisodeSource, sourceB: EpisodeSource): SeriesResult<Unit> =

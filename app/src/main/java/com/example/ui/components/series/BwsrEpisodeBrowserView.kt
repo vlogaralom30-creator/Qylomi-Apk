@@ -263,6 +263,16 @@ fun BwsrEpisodeBrowserView(
                                 }
                                 return false
                             }
+
+                            override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+                                isLoading = false
+                                try {
+                                    val parent = view?.parent as? android.view.ViewGroup
+                                    parent?.removeView(view)
+                                    view?.destroy()
+                                } catch (_: Exception) {}
+                                return true
+                            }
                         }
 
                         webChromeClient = object : WebChromeClient() {

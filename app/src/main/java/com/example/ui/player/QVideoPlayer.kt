@@ -282,7 +282,16 @@ fun YouTubeEmbedPlayer(
                     allowContentAccess = true
                 }
                 webChromeClient = WebChromeClient()
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+                        try {
+                            val parent = view?.parent as? android.view.ViewGroup
+                            parent?.removeView(view)
+                            view?.destroy()
+                        } catch (_: Exception) {}
+                        return true
+                    }
+                }
                 loadDataWithBaseURL("https://www.youtube.com", htmlContent, "text/html", "UTF-8", null)
                 webViewRef = this
             }
