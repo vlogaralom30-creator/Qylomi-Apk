@@ -2,7 +2,6 @@ package com.example.ui.components.series
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
@@ -20,7 +19,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,7 +29,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,17 +56,15 @@ import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
 /**
- * In-App Browser Mode (BWSR) for Series Episode Video Player.
+ * Clean In-App Web Player (BWSR) for Series Episodes.
  *
- * Runs the raw episode URL directly in an optimized in-app WebView without forcing
- * an internal native player. Perfect for host services (Streamtape, DoodStream,
- * Mixdrop, etc.) whose embedded iframes fail or are blocked.
+ * Runs raw web URLs directly (Streamtape, DoodStream, Mixdrop, etc.) in an optimized WebView.
  *
- * Layout features:
- * - Left side (Bam side): Browser Navigation (< Back, > Forward, Reload, Reset URL, Open in Chrome)
- * - Center: Full in-app Web view with HTML5 video fullscreen support
- * - Right side (Dan side): Vertical scrollable Episode Numbers list ("Epi", 1, 2, 3, 4, 5...)
- * - Top: BWSR status badge, domain indicator, loading progress, fullscreen & exit toggles
+ * UI Structure (Ultra Clean):
+ * - Top Bar: Close button, Series & Episode info with host domain, and Fullscreen toggle.
+ * - Left Side Bar: Navigation only (< Back, > Forward).
+ * - Right Side Bar: "Epi" label + vertical scrollable episode number list (1, 2, 3, 4, 5...).
+ * - No extra browser controls, no adblock filters blocking streamtape/doodstream.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -96,9 +96,8 @@ fun BwsrEpisodeBrowserView(
     var customView by remember { mutableStateOf<View?>(null) }
     var customViewCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
 
-    // UI fullscreen mode (expanding the browser container)
+    // Screen Fullscreen Mode
     var isPlayerFullscreen by remember { mutableStateOf(false) }
-    var areSidebarsVisible by remember { mutableStateOf(true) }
 
     val listState = rememberLazyListState()
 
@@ -137,7 +136,7 @@ fun BwsrEpisodeBrowserView(
         }
     }
 
-    // Fullscreen Immersive Mode & Orientation handling for isPlayerFullscreen
+    // Screen orientation & immersive mode handling for Fullscreen
     DisposableEffect(isPlayerFullscreen, activity) {
         val window = activity?.window
         if (window != null) {
@@ -172,7 +171,7 @@ fun BwsrEpisodeBrowserView(
             .background(Color.Black)
             .testTag("bwsr_episode_browser_container")
     ) {
-        // If HTML5 video entered full screen via WebChromeClient.onShowCustomView
+        // HTML5 Video Fullscreen View
         if (customView != null) {
             AndroidView(
                 factory = {
@@ -188,7 +187,7 @@ fun BwsrEpisodeBrowserView(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Floating exit HTML5 custom view button
+            // Floating button to exit HTML5 video fullscreen
             IconButton(
                 onClick = {
                     customViewCallback?.onCustomViewHidden()
@@ -205,7 +204,7 @@ fun BwsrEpisodeBrowserView(
                 Icon(Icons.Default.FullscreenExit, contentDescription = "Exit Fullscreen", tint = Color.White)
             }
         } else {
-            // Main Web Player Area
+            // Main Web Player WebView
             AndroidView(
                 factory = { ctx ->
                     WebView(ctx).apply {
@@ -230,6 +229,7 @@ fun BwsrEpisodeBrowserView(
                             userAgentString = "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
                         }
 
+                        // Clean Native WebViewClient without adblock filtering blocking host domains
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                 super.onPageStarted(view, url, favicon)
@@ -251,7 +251,7 @@ fun BwsrEpisodeBrowserView(
 
                             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                 val reqUrl = request?.url?.toString() ?: return false
-                                // Intercept external intent schemes so spam ads don't force app switches
+                                // Consume intent schemes safely
                                 if (reqUrl.startsWith("intent://") || reqUrl.startsWith("market://") || reqUrl.startsWith("tg://")) {
                                     return try {
                                         val intent = Intent.parseUri(reqUrl, Intent.URI_INTENT_SCHEME)
@@ -310,278 +310,179 @@ fun BwsrEpisodeBrowserView(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // TOP STATUS & CONTROLS BAR
+            // 1. CLEAN TOP BAR (Browser Address Bar & Controls)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
             ) {
                 Surface(
-                    color = Color.Black.copy(alpha = 0.82f),
+                    color = Color.Black.copy(alpha = 0.90f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .statusBarsPadding()
                             .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Left: BWSR badge + Domain info
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        // Exit BWSR Mode Button
+                        IconButton(
+                            onClick = { onExitBwsr() },
+                            modifier = Modifier.size(34.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = QYellowPrimary,
-                                shadowElevation = 2.dp
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Public,
-                                        contentDescription = null,
-                                        tint = QOnYellow,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "BWSR",
-                                        color = QOnYellow,
-                                        style = SeriesTypography.micro,
-                                        fontWeight = FontWeight.Black
-                                    )
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Exit Web Player",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
 
-                            Column {
-                                Text(
-                                    text = if (episodeNumber != null) "EP $episodeNumber • $currentDomain" else currentDomain,
-                                    color = Color.White,
-                                    style = SeriesTypography.label,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                        // Browser Address Bar Pill
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color(0xFF1E1E1E),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Secure",
+                                    tint = QYellowPrimary,
+                                    modifier = Modifier.size(13.dp)
                                 )
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "In-App Host Web Player",
-                                    color = Color.White.copy(alpha = 0.6f),
+                                    text = currentWebUrl.ifBlank { rawUrl },
+                                    color = Color.White.copy(alpha = 0.92f),
                                     style = SeriesTypography.micro,
-                                    fontSize = 10.sp
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Reload",
+                                    tint = Color.White.copy(alpha = 0.7f),
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { webViewInstance?.reload() }
                                 )
                             }
                         }
 
-                        // Right: Sidebar toggle, Fullscreen toggle, and Exit button
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        // Fullscreen Toggle Button
+                        IconButton(
+                            onClick = { isPlayerFullscreen = !isPlayerFullscreen },
+                            modifier = Modifier.size(34.dp)
                         ) {
-                            // Toggle sidebars visibility (so user can view web page without obstruction)
-                            IconButton(
-                                onClick = { areSidebarsVisible = !areSidebarsVisible },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (areSidebarsVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = "Toggle Controls",
-                                    tint = if (areSidebarsVisible) QYellowPrimary else Color.White.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-
-                            // Fullscreen toggle
-                            IconButton(
-                                onClick = { isPlayerFullscreen = !isPlayerFullscreen },
-                                modifier = Modifier.size(30.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isPlayerFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = "Fullscreen",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            // Exit BWSR to return to standard native player
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color.White.copy(alpha = 0.15f),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
-                                modifier = Modifier.clickable { onExitBwsr() }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Tv,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Player",
-                                        color = Color.White,
-                                        style = SeriesTypography.micro,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+                            Icon(
+                                imageVector = if (isPlayerFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = "Toggle Fullscreen",
+                                tint = QYellowPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
 
-                // Page Loading Indicator
+                // Loading progress line
                 if (isLoading) {
                     LinearProgressIndicator(
                         progress = { (loadingProgress / 100f).coerceIn(0.05f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(2.5.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.5.dp),
                         color = QYellowPrimary,
                         trackColor = Color.Transparent
                     )
                 }
             }
 
-            // LEFT SIDEBAR (BAM SIDE): Browser Controls (< Back, > Forward, Reload, Reset URL, Open external)
-            AnimatedVisibility(
-                visible = areSidebarsVisible,
-                enter = fadeIn(tween(150)) + slideInHorizontally(tween(150)) { -it },
-                exit = fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { -it },
+            // 2. LEFT SIDE BAR (BAM SIDE): Navigation (< Back, > Forward) ONLY
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.Black.copy(alpha = 0.85f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                shadowElevation = 8.dp,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(start = 6.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.Black.copy(alpha = 0.85f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                    shadowElevation = 8.dp
+                Column(
+                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    // < Back Button
+                    IconButton(
+                        onClick = {
+                            if (webViewInstance?.canGoBack() == true) {
+                                webViewInstance?.goBack()
+                            } else {
+                                webViewInstance?.loadUrl(rawUrl)
+                            }
+                        },
+                        enabled = canGoBack || currentWebUrl != rawUrl,
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        // < Back
-                        IconButton(
-                            onClick = {
-                                if (webViewInstance?.canGoBack() == true) {
-                                    webViewInstance?.goBack()
-                                } else {
-                                    webViewInstance?.loadUrl(rawUrl)
-                                }
-                            },
-                            enabled = canGoBack || currentWebUrl != rawUrl,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Browser Back",
-                                tint = if (canGoBack || currentWebUrl != rawUrl) Color.White else Color.White.copy(alpha = 0.3f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // > Forward
-                        IconButton(
-                            onClick = {
-                                if (webViewInstance?.canGoForward() == true) {
-                                    webViewInstance?.goForward()
-                                }
-                            },
-                            enabled = canGoForward,
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Browser Forward",
-                                tint = if (canGoForward) Color.White else Color.White.copy(alpha = 0.3f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        HorizontalDivider(
-                            modifier = Modifier.width(20.dp),
-                            color = Color.White.copy(alpha = 0.2f),
-                            thickness = 1.dp
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = if (canGoBack || currentWebUrl != rawUrl) Color.White else Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.size(20.dp)
                         )
+                    }
 
-                        // Reload
-                        IconButton(
-                            onClick = { webViewInstance?.reload() },
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Reload",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Reset to Original Episode URL
-                        IconButton(
-                            onClick = { webViewInstance?.loadUrl(rawUrl) },
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Replay,
-                                contentDescription = "Reset URL",
-                                tint = QYellowPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Open in External Browser
-                        IconButton(
-                            onClick = {
-                                try {
-                                    val target = if (currentWebUrl.isNotBlank()) currentWebUrl else rawUrl
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target))
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {}
-                            },
-                            modifier = Modifier.size(34.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInNew,
-                                contentDescription = "Open in Chrome/Browser",
-                                tint = Color.White.copy(alpha = 0.85f),
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
+                    // > Forward Button
+                    IconButton(
+                        onClick = {
+                            if (webViewInstance?.canGoForward() == true) {
+                                webViewInstance?.goForward()
+                            }
+                        },
+                        enabled = canGoForward,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Forward",
+                            tint = if (canGoForward) Color.White else Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
             }
 
-            // RIGHT SIDEBAR (DAN SIDE): Episode Numbers Strip ("Epi", 1, 2, 3, 4, 5... with up/down scroll)
-            AnimatedVisibility(
-                visible = areSidebarsVisible && episodes.isNotEmpty(),
-                enter = fadeIn(tween(150)) + slideInHorizontally(tween(150)) { it },
-                exit = fadeOut(tween(150)) + slideOutHorizontally(tween(150)) { it },
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-            ) {
+            // 3. RIGHT SIDE BAR (DAN SIDE): "Epi" label + Episode Number Strip
+            if (episodes.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color.Black.copy(alpha = 0.88f),
                     border = BorderStroke(1.dp, QYellowPrimary.copy(alpha = 0.4f)),
                     shadowElevation = 8.dp,
-                    modifier = Modifier.widthIn(min = 44.dp, max = 50.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 6.dp)
+                        .widthIn(min = 44.dp, max = 50.dp)
                 ) {
                     Column(
                         modifier = Modifier
-                            .heightIn(max = if (isPlayerFullscreen) 280.dp else 190.dp)
+                            .heightIn(max = if (isPlayerFullscreen) 280.dp else 200.dp)
                             .padding(vertical = 6.dp, horizontal = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // "Epi" Header
+                        // "Epi" Header Tag
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = QYellowPrimary,
@@ -597,7 +498,7 @@ fun BwsrEpisodeBrowserView(
                             )
                         }
 
-                        // Up/Down Scrollable Episode Numbers
+                        // Up/Down Scrollable Vertical Episode Numbers List
                         LazyColumn(
                             state = listState,
                             verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -608,7 +509,7 @@ fun BwsrEpisodeBrowserView(
                                 val isSelected = ep.id == currentEpisodeId
                                 Surface(
                                     shape = CircleShape,
-                                    color = if (isSelected) QYellowPrimary else Color.White.copy(alpha = 0.14f),
+                                    color = if (isSelected) QYellowPrimary else Color.White.copy(alpha = 0.15f),
                                     border = if (isSelected) BorderStroke(1.5.dp, Color.White) else BorderStroke(0.5.dp, Color.White.copy(alpha = 0.2f)),
                                     modifier = Modifier
                                         .size(34.dp)

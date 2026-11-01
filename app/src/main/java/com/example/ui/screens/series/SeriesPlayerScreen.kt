@@ -101,134 +101,141 @@ fun SeriesPlayerScreen(
         val hasNextEp = currentIndex in 0 until (uiState.episodes.size - 1)
         val nextEp = if (hasNextEp) uiState.episodes.getOrNull(currentIndex + 1) else null
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            // 1. Episode Stage (Normal Media3 ExoPlayer or In-App Web Browser BWSR Mode)
+        if (isBwsrMode && activeSource != null && currentEp != null) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .background(SeriesTokens.StageBlack)
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
-                if (isBwsrMode && activeSource != null && currentEp != null) {
-                    BwsrEpisodeBrowserView(
-                        rawUrl = activeSource.url,
-                        episodes = uiState.episodes,
-                        currentEpisodeId = currentEp.id,
-                        seriesTitle = currentSeries?.title,
-                        episodeNumber = currentEp.episodeNumber,
-                        modifier = Modifier.fillMaxSize(),
-                        onSelectEpisode = { ep ->
-                            viewModel.selectEpisode(ep)
-                        },
-                        onExitBwsr = {
-                            isBwsrMode = false
-                        }
-                    )
-                } else if (activeSource != null && currentEp != null) {
-                    EpisodePlayerView(
-                        rawVideoUrl = activeSource.url,
-                        initialPositionSec = uiState.initialSeekPositionSec,
-                        showSkipIntro = uiState.showSkipIntro,
-                        introStartSec = currentEp.introStartSec ?: 0,
-                        introEndSec = currentEp.introEndSec ?: 0,
-                        fallbackNotice = uiState.fallbackNotice,
-                        autoplayCountdown = uiState.autoplayCountdown,
-                        nextEpisodeTitle = nextEp?.title,
-                        episodeNumber = currentEp.episodeNumber,
-                        episodeTitle = currentEp.title,
-                        seriesTitle = currentSeries?.title,
-                        backdropUrl = currentEp.thumbnailUrl ?: currentSeries?.effectiveBannerUrl,
-                        serverBadge = "${activeSource.label}${if (!activeSource.quality.isNullOrBlank()) " • ${activeSource.quality}" else ""}",
-                        hasPrevEp = hasPrevEp,
-                        hasNextEp = hasNextEp,
-                        onPositionUpdate = { pos, dur ->
-                            viewModel.updatePlaybackPosition(pos, dur)
-                        },
-                        onVideoReady = { dur ->
-                            viewModel.onVideoReady(dur)
-                        },
-                        onError = { err ->
-                            viewModel.handleSourcePlaybackError(err)
-                        },
-                        onEnded = {
-                            viewModel.onVideoEnded()
-                        },
-                        onPlayPrevClick = if (hasPrevEp) {
-                            { viewModel.selectEpisode(uiState.episodes[currentIndex - 1]) }
-                        } else null,
-                        onPlayNextClick = {
-                            viewModel.playNextEpisode()
-                        },
-                        onCancelAutoplayClick = {
-                            viewModel.cancelAutoplayCountdown()
-                        },
-                        onRetrySource = {
-                            viewModel.selectSourceManually(activeSource)
-                        },
-                        onBackClick = onBackClick,
-                        onBwsrClick = {
-                            isBwsrMode = true
-                        }
-                    )
-                } else if (uiState.playerError != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black)
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = "Error",
-                                tint = QLikeRed,
-                                modifier = Modifier.size(36.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = uiState.playerError ?: "No sources available",
-                                color = Color.White,
-                                style = SeriesTypography.body
-                            )
-                            if (activeSource != null) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Button(
-                                    onClick = { isBwsrMode = true },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = QYellowPrimary,
-                                        contentColor = QOnYellow
-                                    ),
-                                    shape = SeriesTokens.shapePill
-                                ) {
-                                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Play in (BWSR) Mode", fontWeight = FontWeight.Bold)
+                BwsrEpisodeBrowserView(
+                    rawUrl = activeSource.url,
+                    episodes = uiState.episodes,
+                    currentEpisodeId = currentEp.id,
+                    seriesTitle = currentSeries?.title,
+                    episodeNumber = currentEp.episodeNumber,
+                    modifier = Modifier.fillMaxSize(),
+                    onSelectEpisode = { ep ->
+                        viewModel.selectEpisode(ep)
+                    },
+                    onExitBwsr = {
+                        isBwsrMode = false
+                    }
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                // 1. Episode Stage (Normal Media3 ExoPlayer)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .background(SeriesTokens.StageBlack)
+                ) {
+                    if (activeSource != null && currentEp != null) {
+                        EpisodePlayerView(
+                            rawVideoUrl = activeSource.url,
+                            initialPositionSec = uiState.initialSeekPositionSec,
+                            showSkipIntro = uiState.showSkipIntro,
+                            introStartSec = currentEp.introStartSec ?: 0,
+                            introEndSec = currentEp.introEndSec ?: 0,
+                            fallbackNotice = uiState.fallbackNotice,
+                            autoplayCountdown = uiState.autoplayCountdown,
+                            nextEpisodeTitle = nextEp?.title,
+                            episodeNumber = currentEp.episodeNumber,
+                            episodeTitle = currentEp.title,
+                            seriesTitle = currentSeries?.title,
+                            backdropUrl = currentEp.thumbnailUrl ?: currentSeries?.effectiveBannerUrl,
+                            serverBadge = "${activeSource.label}${if (!activeSource.quality.isNullOrBlank()) " • ${activeSource.quality}" else ""}",
+                            hasPrevEp = hasPrevEp,
+                            hasNextEp = hasNextEp,
+                            onPositionUpdate = { pos, dur ->
+                                viewModel.updatePlaybackPosition(pos, dur)
+                            },
+                            onVideoReady = { dur ->
+                                viewModel.onVideoReady(dur)
+                            },
+                            onError = { err ->
+                                viewModel.handleSourcePlaybackError(err)
+                            },
+                            onEnded = {
+                                viewModel.onVideoEnded()
+                            },
+                            onPlayPrevClick = if (hasPrevEp) {
+                                { viewModel.selectEpisode(uiState.episodes[currentIndex - 1]) }
+                            } else null,
+                            onPlayNextClick = {
+                                viewModel.playNextEpisode()
+                            },
+                            onCancelAutoplayClick = {
+                                viewModel.cancelAutoplayCountdown()
+                            },
+                            onRetrySource = {
+                                viewModel.selectSourceManually(activeSource)
+                            },
+                            onBackClick = onBackClick,
+                            onBwsrClick = {
+                                isBwsrMode = true
+                            }
+                        )
+                    } else if (uiState.playerError != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black)
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Error",
+                                    tint = QLikeRed,
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = uiState.playerError ?: "No sources available",
+                                    color = Color.White,
+                                    style = SeriesTypography.body
+                                )
+                                if (activeSource != null) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { isBwsrMode = true },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = QYellowPrimary,
+                                            contentColor = QOnYellow
+                                        ),
+                                        shape = SeriesTokens.shapePill
+                                    ) {
+                                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Play in (BWSR) Mode", fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = QYellowPrimary)
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = QYellowPrimary)
+                        }
                     }
                 }
-            }
 
-            // 2. Scrollable Body
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
+                // 2. Scrollable Body
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
                 // Series Link & Episode Info Header
                 item {
                     Column(
@@ -628,6 +635,7 @@ fun SeriesPlayerScreen(
                 }
             }
         }
+    }
 
         // Report Source Bottom Sheet
         if (uiState.isReportSheetOpen) {

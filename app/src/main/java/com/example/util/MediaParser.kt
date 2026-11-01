@@ -160,22 +160,13 @@ object MediaParser {
         }
 
         // Streamtape check
-        STREAMTAPE_REGEX.find(trimmed)?.let { match ->
-            val videoId = match.groupValues[1]
-            return ParsedMedia(
-                type = MediaType.STREAMTAPE,
-                url = trimmed,
-                id = videoId,
-                embedUrl = "https://streamtape.com/e/$videoId/"
-            )
-        }
         if (isStreamtapeUrl(trimmed)) {
             val videoId = com.example.video.streamtape.StreamtapeHandler.extractId(trimmed)
             return ParsedMedia(
                 type = MediaType.STREAMTAPE,
                 url = trimmed,
                 id = videoId,
-                embedUrl = if (videoId != null) "https://streamtape.com/e/$videoId/" else trimmed
+                embedUrl = trimmed
             )
         }
 
@@ -186,7 +177,7 @@ object MediaParser {
                 type = MediaType.DOODSTREAM,
                 url = trimmed,
                 id = videoId,
-                embedUrl = if (videoId != null) "https://dood.to/e/$videoId/" else trimmed
+                embedUrl = trimmed
             )
         }
 

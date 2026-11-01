@@ -119,12 +119,10 @@ object VideoEmbedUtils {
                 if (fileId != null) "https://drive.google.com/file/d/$fileId/preview" else cleanUrl
             }
             "streamtape" -> {
-                val videoId = parsed?.videoId ?: com.example.video.streamtape.StreamtapeHandler.extractId(cleanUrl)
-                if (videoId != null) "https://streamtape.com/e/$videoId/" else cleanUrl
+                cleanUrl
             }
             "doodstream" -> {
-                val videoId = parsed?.videoId ?: com.example.video.doodstream.DoodStreamHandler.extractId(cleanUrl)
-                if (videoId != null) "https://dood.to/e/$videoId/" else cleanUrl
+                cleanUrl
             }
             else -> {
                 if (isCode || cleanUrl.contains("/e/") || cleanUrl.contains("/embed/")) {

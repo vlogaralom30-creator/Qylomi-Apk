@@ -58,8 +58,7 @@ class StreamtapeHandler : VideoPlatformHandler {
         }
 
         fun toEmbedUrl(url: String): String {
-            val id = extractId(url)
-            return if (id != null) "https://streamtape.com/e/$id/" else url.trim()
+            return url.trim()
         }
 
         fun buildIframeHtml(embedUrl: String): String {
